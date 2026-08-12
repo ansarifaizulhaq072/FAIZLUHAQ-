@@ -1,214 +1,191 @@
 <!DOCTYPE html>
 <html lang="ur" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مدرسہ ڈونیشن اینڈ منیجمنٹ سسٹم</title>
-    
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <style>
-        :root {
-            --primary: #047857;
-            --secondary: #10b981;
-            --danger: #ef4444;
-            --bg-body: #f1f5f9;
-            --card-bg: #ffffff;
-            --text-main: #1e293b;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>مدرسہ ڈونیشن مینجمنٹ سسٹم</title>
 
-        * { box-sizing: border-box; font-family: 'Noto Nastaliq Urdu', Tahoma, sans-serif; }
-        body { background-color: var(--bg-body); color: var(--text-main); margin: 0; padding: 12px; direction: rtl; }
-        .container { max-width: 1000px; margin: 0 auto; }
+  <!-- External Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
-        .card { 
-            background: var(--card-bg); 
-            padding: 20px; 
-            border-radius: 14px; 
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); 
-            margin-bottom: 16px; 
-            border: 1px solid #e2e8f0;
-        }
-
-        .app-header {
-            background: linear-gradient(135deg, #047857, #065f46);
-            color: #fff;
-            padding: 16px 20px;
-            border-radius: 14px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-        }
-
-        #loginScreen { display: flex; justify-content: center; align-items: center; min-height: 85vh; }
-        .auth-card { 
-            background: #fff; 
-            padding: 25px 20px; 
-            border-radius: 16px; 
-            width: 100%; 
-            max-width: 400px; 
-            box-shadow: 0 10px 20px rgba(0,0,0,0.08); 
-            text-align: center;
-            border: 1px solid #e2e8f0;
-        }
-
-        .form-group { margin-bottom: 12px; text-align: right; }
-        label { display: block; margin-bottom: 4px; font-weight: bold; font-size: 13px; color: #475569; }
-        input, select { 
-            width: 100%; 
-            padding: 10px; 
-            border: 1.5px solid #cbd5e1; 
-            border-radius: 8px; 
-            font-size: 14px; 
-            outline: none; 
-            background-color: #f8fafc;
-        }
-        input:focus, select:focus { border-color: var(--primary); background-color: #fff; }
-
-        .btn { 
-            border: none; 
-            padding: 10px 15px; 
-            border-radius: 8px; 
-            cursor: pointer; 
-            font-weight: bold; 
-            font-size: 14px; 
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-        }
-        .btn-primary { background: var(--primary); color: #fff; width: 100%; margin-top: 8px; }
-        .btn-success { background: var(--secondary); color: #fff; width: 100%; margin-top: 8px; }
-        .btn-danger { background: var(--danger); color: #fff; }
-        .btn-secondary { background: #64748b; color: #fff; }
-
-        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-        
-        @media (max-width: 650px) {
-            .grid-3 { grid-template-columns: 1fr; }
-        }
-    </style>
-
-    <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <div class="container">
-
-        <!-- 1. LOGIN SCREEN -->
-        <div id="loginScreen">
-            <div class="auth-card">
-                <div style="font-size: 36px; color: var(--primary); margin-bottom: 8px;"><i class="fa-solid fa-mosque"></i></div>
-                <h2 style="color: var(--primary); margin: 0 0 15px 0; font-size: 18px;">مدرسہ پورٹل میں لاگ ان کریں</h2>
-                
-                <div class="form-group">
-                    <label>مدرسہ کا نام:</label>
-                    <input type="text" id="loginMadarsaName" placeholder="مثال: جامعہ اسلامیہ">
-                </div>
-                <div class="form-group">
-                    <label>پاس ورڈ:</label>
-                    <input type="password" id="loginMadarsaPassword" placeholder="پاس ورڈ درج کریں">
-                </div>
-                
-                <button type="button" class="btn btn-primary" onclick="loginUser()">لاگ ان کریں</button>
-            </div>
+  <!-- Auth Container (Login, Signup, Forgot Password) -->
+  <div id="auth-container" class="container">
+    
+    <!-- Login Screen -->
+    <div id="login-box" class="card">
+      <h2>مدرسہ لاگ ان</h2>
+      <form id="login-form">
+        <div class="form-group">
+          <label>ای میل (Email):</label>
+          <input type="email" id="login-email" placeholder="ای میل درج کریں" required>
         </div>
-
-        <!-- 2. MAIN APPLICATION SCREEN -->
-        <div id="appScreen" style="display: none;">
-            
-            <div class="app-header">
-                <h2 style="margin: 0; font-size: 16px;"><i class="fa-solid fa-kaaba"></i> مدرسہ پورٹل</h2>
-                <button onclick="logoutUser()" class="btn btn-danger" style="padding: 5px 12px; font-size: 12px;">خروج</button>
-            </div>
-
-            <!-- Receipt Input Form -->
-            <div class="card">
-                <h3 style="color: var(--primary); margin-top: 0; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px; font-size: 15px;">
-                    <i class="fa-solid fa-pen-to-square"></i> نئی رسید درج کریں
-                </h3>
-                <form id="receiptForm" onsubmit="return false;">
-                    <div class="grid-3">
-                        <div class="form-group">
-                            <label>مدرسہ کا نام:</label>
-                            <input type="text" id="madarsa" required placeholder="مدرسہ کا نام">
-                        </div>
-                        <div class="form-group">
-                            <label>جلد نمبر:</label>
-                            <input type="text" id="jild" placeholder="مثال: 1">
-                        </div>
-                        <div class="form-group">
-                            <label>صفحہ نمبر:</label>
-                            <input type="text" id="safha" placeholder="مثال: 12">
-                        </div>
-                    </div>
-
-                    <div class="grid-3">
-                        <div class="form-group">
-                            <label>رسید نمبر:</label>
-                            <input type="text" id="receipt" required placeholder="مثال: 101">
-                        </div>
-                        <div class="form-group">
-                            <label>تاریخ:</label>
-                            <input type="date" id="date" required>
-                        </div>
-                        <div class="form-group">
-                            <label>نام دہندہ:</label>
-                            <input type="text" id="name" required placeholder="نام">
-                        </div>
-                    </div>
-
-                    <div class="grid-3">
-                        <div class="form-group">
-                            <label>موبائل نمبر:</label>
-                            <input type="text" id="mobile" placeholder="موبائل">
-                        </div>
-                        <div class="form-group">
-                            <label>پتہ:</label>
-                            <input type="text" id="address" placeholder="پتہ">
-                        </div>
-                        <div class="form-group">
-                            <label>چندہ کی مد:</label>
-                            <select id="type">
-                                <option value="عام چندہ">عام چندہ</option>
-                                <option value="زکوۃ">زکوۃ</option>
-                                <option value="صدقہ">صدقہ</option>
-                                <option value="تعمیرات">تعمیرات</option>
-                                <option value="امداد">امداد</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>وصول شدہ رقم (₹):</label>
-                        <input type="number" id="amount" required placeholder="رقم درج کریں">
-                    </div>
-
-                    <div style="display: flex; gap: 8px;">
-                        <button type="button" onclick="saveReceiptData()" class="btn btn-primary" style="flex: 2;">محفوظ کریں</button>
-                        <button type="button" id="cancelEditBtn" onclick="resetForm()" class="btn btn-secondary" style="flex: 1; display: none;">منسوخ</button>
-                    </div>
-                </form>
-            </div>
-
-            <!-- Search & Summary -->
-            <div class="card">
-                <input type="text" id="searchBox" placeholder="🔍 تلاش کریں (نام، رسید نمبر، یا موبائل سے)..." style="margin-bottom: 10px;">
-                <div id="summary"></div>
-            </div>
-
-            <!-- Register Table / Cards Container -->
-            <div id="receiptList"></div>
-
+        <div class="form-group">
+          <label>پاس ورڈ (Password):</label>
+          <input type="password" id="login-password" placeholder="پاس ورڈ درج کریں" required>
         </div>
-
+        <button type="submit" class="btn btn-primary">لاگ ان کریں</button>
+      </form>
+      <div class="auth-links">
+        <a href="#" id="show-signup">نیا اکاؤنٹ بنائیں (Signup)</a> | 
+        <a href="#" id="show-forgot">پاس ورڈ بھول گئے؟</a>
+      </div>
     </div>
 
-    <!-- Script File -->
-    <script src="script-new.js"></script>
+    <!-- Signup Screen -->
+    <div id="signup-box" class="card hidden">
+      <h2>نیا اکاؤنٹ بنائیں</h2>
+      <form id="signup-form">
+        <div class="form-group">
+          <label>ای میل (Email):</label>
+          <input type="email" id="signup-email" placeholder="ای میل درج کریں" required>
+        </div>
+        <div class="form-group">
+          <label>پاس ورڈ (Password):</label>
+          <input type="password" id="signup-password" placeholder="کم از کم 6 ہندسے" required>
+        </div>
+        <button type="submit" class="btn btn-success">رجسٹر کریں</button>
+      </form>
+      <div class="auth-links">
+        <a href="#" id="show-login-from-signup">پہلے سے اکاؤنٹ ہے؟ لاگ ان کریں</a>
+      </div>
+    </div>
+
+    <!-- Forgot Password Screen -->
+    <div id="forgot-box" class="card hidden">
+      <h2>پاس ورڈ ری سیٹ کریں</h2>
+      <form id="forgot-form">
+        <div class="form-group">
+          <label>ای میل درج کریں:</label>
+          <input type="email" id="forgot-email" placeholder="اپنی رجسٹرڈ ای میل درج کریں" required>
+        </div>
+        <button type="submit" class="btn btn-warning">ری سیٹ لنک بھیجیں</button>
+      </form>
+      <div class="auth-links">
+        <a href="#" id="show-login-from-forgot">واپس لاگ ان کی طرف جائیں</a>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Main App Container (Hidden until Logged In) -->
+  <div id="app-container" class="container hidden">
+    
+    <!-- Top Header -->
+    <header class="app-header">
+      <h1>🕌 مدرسہ ڈونیشن مینجمنٹ</h1>
+      <button id="logout-btn" class="btn btn-danger btn-sm">لاگ آؤٹ</button>
+    </header>
+
+    <!-- Madrasa Selection Section -->
+    <section class="card">
+      <div class="form-group">
+        <label>مدرسہ منتخب کریں:</label>
+        <select id="madrasa-select">
+          <option value="default">مرکزی مدرسہ</option>
+        </select>
+      </div>
+      <button id="add-madrasa-btn" class="btn btn-secondary btn-sm">+ نیا مدرسہ شامل کریں</button>
+    </section>
+
+    <!-- New Receipt Form -->
+    <section class="card">
+      <h2>🧾 نئی رسید بنائیں</h2>
+      <form id="receipt-form">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>جلد نمبر:</label>
+            <input type="text" id="jild-no" required>
+          </div>
+          <div class="form-group">
+            <label>صفحہ نمبر:</label>
+            <input type="text" id="safha-no" required>
+          </div>
+          <div class="form-group">
+            <label>رسید نمبر:</label>
+            <input type="text" id="receipt-no" required>
+          </div>
+          <div class="form-group">
+            <label>تاریخ:</label>
+            <input type="date" id="receipt-date" required>
+          </div>
+          <div class="form-group">
+            <label>نام ڈونر:</label>
+            <input type="text" id="donor-name" required>
+          </div>
+          <div class="form-group">
+            <label>موبائل نمبر:</label>
+            <input type="tel" id="donor-mobile">
+          </div>
+          <div class="form-group">
+            <label>پتہ:</label>
+            <input type="text" id="donor-address">
+          </div>
+          <div class="form-group">
+            <label>چندے کی مد:</label>
+            <select id="donation-type">
+              <option value="زکوٰۃ">زکوٰۃ</option>
+              <option value="صدقات">صدقات</option>
+              <option value="عام چندہ">عام چندہ</option>
+              <option value="دیگر">دیگر</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>رقم (₹):</label>
+            <input type="number" id="donation-amount" required>
+          </div>
+        </div>
+
+        <!-- OCR Scan Section -->
+        <div class="form-group">
+          <label>📷 رسید کی تصویر (OCR اسکینر):</label>
+          <input type="file" id="receipt-image" accept="image/*">
+          <button type="button" id="scan-ocr-btn" class="btn btn-info btn-sm">تصویر سے ڈیٹا پڑھیں</button>
+        </div>
+
+        <button type="submit" class="btn btn-success">💾 ریکارڈ محفوظ کریں</button>
+      </form>
+    </section>
+
+    <!-- Search & Receipt List -->
+    <section class="card">
+      <h2>🔍 رسیدوں کی فہرست و تلاش</h2>
+      <input type="text" id="search-input" placeholder="رسید نمبر یا نام سے تلاش کریں..." class="search-box">
+      
+      <div id="receipts-list" class="receipts-grid">
+        <!-- Receipt cards will appear here -->
+      </div>
+    </section>
+
+    <!-- Summary & Chart -->
+    <section class="card">
+      <h2>📊 مالی حساب و خلاصہ</h2>
+      <div id="summary-boxes" class="summary-grid">
+        <div class="summary-box">کل رسیدیں: <span id="total-receipts">0</span></div>
+        <div class="summary-box">کل رقم: ₹<span id="total-amount">0</span></div>
+      </div>
+      <div class="chart-container">
+        <canvas id="donationChart"></canvas>
+      </div>
+    </section>
+
+    <!-- Backup & Restore -->
+    <section class="card">
+      <h2>💾 بیک اپ و بحالی</h2>
+      <div class="action-buttons">
+        <button id="backup-btn" class="btn btn-primary">📥 بیک اپ ڈاؤن لوڈ کریں</button>
+        <input type="file" id="restore-file" accept=".json" class="hidden">
+        <button id="restore-btn" class="btn btn-warning">📤 بیک اپ بحال کریں</button>
+      </div>
+    </section>
+
+  </div>
+
+  <script type="module" src="script-new.js"></script>
 </body>
 </html>
