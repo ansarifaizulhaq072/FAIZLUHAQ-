@@ -1,197 +1,299 @@
-// Firebase Configuration
+// Firebase Config & Import (Web SDK v9+)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { 
+  getAuth, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  sendPasswordResetEmail, 
+  signOut, 
+  onAuthStateChanged 
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  getDocs, 
+  deleteDoc, 
+  doc, 
+  query, 
+  where 
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+// ⚠️ اپنی Firebase کی تفصیلات یہاں درج کریں (یہاں ابھی آپ کا ٹیسٹ کنفیگ ہے)
 const firebaseConfig = {
-    apiKey: "AIzaSyBs44-LZ1HF7mbUfET4jWlSd4MxSCwVuEk",
-    authDomain: "madarsa-donation--system.firebaseapp.com",
-    databaseURL: "https://madarsa-donation--system-default-rtdb.firebaseio.com",
-    projectId: "madarsa-donation--system",
-    storageBucket: "madarsa-donation--system.firebasestorage.app",
-    messagingSenderId: "312717937743",
-    appId: "1:312717937743:web:7fd6f52704d414affb2e3a"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_STORAGE_BUCKET",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId: "YOUR_APP_ID"
 };
 
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-}
-const db = firebase.firestore();
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-let receipts = [];
-let editingReceiptId = null;
+// DOM Elements
+const authContainer = document.getElementById('auth-container');
+const appContainer = document.getElementById('app-container');
+const loginBox = document.getElementById('login-box');
+const signupBox = document.getElementById('signup-box');
+const forgotBox = document.getElementById('forgot-box');
 
-function loginUser() {
-    const name = document.getElementById("loginMadarsaName").value.trim();
-    const pass = document.getElementById("loginMadarsaPassword").value.trim();
-    
-    if (!name || !pass) {
-        alert("براہ کرم مدرسہ کا نام اور پاس ورڈ درج کریں!");
-        return;
-    }
+// Navigation Links
+document.getElementById('show-signup').onclick = (e) => { e.preventDefault(); loginBox.classList.add('hidden'); signupBox.classList.remove('hidden'); };
+document.getElementById('show-forgot').onclick = (e) => { e.preventDefault(); loginBox.classList.add('hidden'); forgotBox.classList.remove('hidden'); };
+document.getElementById('show-login-from-signup').onclick = (e) => { e.preventDefault(); signupBox.classList.add('hidden'); loginBox.classList.remove('hidden'); };
+document.getElementById('show-login-from-forgot').onclick = (e) => { e.preventDefault(); forgotBox.classList.add('hidden'); loginBox.classList.remove('hidden'); };
 
-    document.getElementById("loginScreen").style.display = "none";
-    document.getElementById("appScreen").style.display = "block";
-    
-    if (document.getElementById("madarsa")) {
-        document.getElementById("madarsa").value = name;
-    }
+// State Variables
+let currentUser = null;
+let allReceipts = [];
+let donationChart = null;
 
-    fetchReceiptsFromFirebase();
-}
+// Auth State Listener
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    currentUser = user;
+    authContainer.classList.add('hidden');
+    appContainer.classList.remove('hidden');
+    loadReceipts();
+  } else {
+    currentUser = null;
+    appContainer.classList.add('hidden');
+    authContainer.classList.remove('hidden');
+  }
+});
 
-function logoutUser() {
-    document.getElementById("loginScreen").style.display = "flex";
-    document.getElementById("appScreen").style.display = "none";
-    receipts = [];
-}
+// --- Auth Actions ---
 
-function fetchReceiptsFromFirebase() {
-    db.collection("receipts").onSnapshot((snapshot) => {
-        receipts = [];
-        snapshot.forEach((doc) => {
-            receipts.push({ id: doc.id, ...doc.data() });
-        });
-        renderRegisterTable(receipts);
-        renderSummaryForData(receipts);
-    }, (error) => {
-        console.log("ڈیٹا لوڈ کرنے میں ایرر:", error);
+// Login
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
+  try {
+    await signInWithEmailAndPassword(auth, email, password);
+    alert('لاگ ان کامیاب ہو گیا!');
+  } catch (err) {
+    alert('لاگ ان میں غلطی: ' + err.message);
+  }
+});
+
+// Signup
+document.getElementById('signup-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('signup-email').value;
+  const password = document.getElementById('signup-password').value;
+  try {
+    await createUserWithEmailAndPassword(auth, email, password);
+    alert('اکاؤنٹ بن گیا!');
+  } catch (err) {
+    alert('سائن اپ میں غلطی: ' + err.message);
+  }
+});
+
+// Forgot Password
+document.getElementById('forgot-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('forgot-email').value;
+  try {
+    await sendPasswordResetEmail(auth, email);
+    alert('پاس ورڈ ری سیٹ کا لنک ای میل کر دیا گیا ہے!');
+  } catch (err) {
+    alert('غلطی: ' + err.message);
+  }
+});
+
+// Logout
+document.getElementById('logout-btn').onclick = () => signOut(auth);
+
+// --- Receipt Actions ---
+
+// Save Receipt
+document.getElementById('receipt-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  const receiptData = {
+    userId: currentUser.uid,
+    jildNo: document.getElementById('jild-no').value,
+    safhaNo: document.getElementById('safha-no').value,
+    receiptNo: document.getElementById('receipt-no').value,
+    date: document.getElementById('receipt-date').value,
+    donorName: document.getElementById('donor-name').value,
+    donorMobile: document.getElementById('donor-mobile').value,
+    donorAddress: document.getElementById('donor-address').value,
+    type: document.getElementById('donation-type').value,
+    amount: Number(document.getElementById('donation-amount').value),
+    createdAt: new Date().toISOString()
+  };
+
+  try {
+    // Firestore میں محفوظ کریں
+    await addDoc(collection(db, "receipts"), receiptData);
+    alert("رسید کامیا بی سے محفوظ ہو گئی!");
+    document.getElementById('receipt-form').reset();
+    loadReceipts();
+  } catch (err) {
+    alert("سیو کرنے میں مسئلہ: " + err.message);
+  }
+});
+
+// Fetch Receipts from Firestore
+async function loadReceipts() {
+  if (!currentUser) return;
+  
+  try {
+    const q = query(collection(db, "receipts"), where("userId", "==", currentUser.uid));
+    const querySnapshot = await getDocs(q);
+    allReceipts = [];
+    querySnapshot.forEach((docSnap) => {
+      allReceipts.push({ id: docSnap.id, ...docSnap.data() });
     });
-}
-
-function renderRegisterTable(dataToRender) {
-    const container = document.getElementById("receiptList");
-    if (!container) return;
-
-    let rowsHtml = "";
-    dataToRender.forEach((r) => {
-        rowsHtml += `
-            <tr style="border-bottom: 1px solid #f1f5f9; text-align: center;">
-                <td style="padding: 8px 4px; font-size: 12px; font-weight: bold;">${r.receipt || '-'}</td>
-                <td style="padding: 8px 4px; font-size: 12px; text-align: right;">${r.name || 'نامعلوم'}</td>
-                <td style="padding: 8px 4px; font-size: 12px;">${r.type || 'عام چندہ'}</td>
-                <td style="padding: 8px 4px; font-size: 12px; font-weight: bold; color: #10b981;">₹${r.amount || 0}</td>
-                <td style="padding: 8px 4px; white-space: nowrap;">
-                    <button onclick="editReceipt('${r.id}')" style="background:#f59e0b; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;">ترمیم</button>
-                    <button onclick="deleteReceipt('${r.id}')" style="background:#ef4444; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;">حذف</button>
-                </td>
-            </tr>
-        `;
-    });
-
-    container.innerHTML = `
-        <div class="card" style="padding:0; overflow-x:auto;">
-            <table style="width:100%; border-collapse:collapse; background:#fff; border-radius:10px;">
-                <thead>
-                    <tr style="background:#f8fafc; border-bottom:2px solid #e2e8f0; text-align:center;">
-                        <th style="padding:8px 4px; font-size:12px;">رسید #</th>
-                        <th style="padding:8px 4px; font-size:12px; text-align:right;">نام</th>
-                        <th style="padding:8px 4px; font-size:12px;">مد</th>
-                        <th style="padding:8px 4px; font-size:12px;">رقم</th>
-                        <th style="padding:8px 4px; font-size:12px;">ایکشن</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${rowsHtml || `<tr><td colspan="5" style="text-align:center; padding:15px; color:#94a3b8;">کوئی رسید موجود نہیں ہے۔</td></tr>`}
-                </tbody>
-            </table>
-        </div>
-    `;
-}
-
-function renderSummaryForData(data) {
-    const summaryDiv = document.getElementById("summary");
-    if (!summaryDiv) return;
-
-    const totalCount = data.length;
-    const totalAmount = data.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
-
-    summaryDiv.innerHTML = `
-        <div style="background: #f0fdf4; border-radius: 8px; padding: 10px 12px; border: 1px solid #bbf7d0;">
-            <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:bold; color:#166534;">
-                <span>کل رسیدیں: ${totalCount}</span>
-                <span>کل وصولی: ₹ ${totalAmount}</span>
-            </div>
-        </div>
-    `;
-}
-
-function saveReceiptData() {
-    const madarsaVal = document.getElementById("madarsa").value.trim();
-    const receiptVal = document.getElementById("receipt").value.trim();
-    const dateVal = document.getElementById("date").value;
-    const nameVal = document.getElementById("name").value.trim();
-    const amountVal = document.getElementById("amount").value;
-
-    if(!madarsaVal || !receiptVal || !dateVal || !nameVal || !amountVal) {
-        return alert("براہ کرم تمام ضروری خانوں کو پر کریں!");
-    }
-
-    const receiptData = {
-        madarsa: madarsaVal,
-        jild: document.getElementById("jild").value.trim(),
-        safha: document.getElementById("safha").value.trim(),
-        receipt: receiptVal,
-        date: dateVal,
-        name: nameVal,
-        mobile: document.getElementById("mobile").value.trim(),
-        address: document.getElementById("address").value.trim(),
-        type: document.getElementById("type").value,
-        amount: Number(amountVal)
-    };
-
-    if (editingReceiptId) {
-        db.collection("receipts").doc(editingReceiptId).update(receiptData).then(() => {
-            alert("رسید اپڈیٹ ہو گئی!");
-            resetForm();
-        }).catch(err => alert("ایرر: " + err.message));
-    } else {
-        db.collection("receipts").add(receiptData).then(() => {
-            alert("رسید محفوظ ہو گئی!");
-            resetForm();
-        }).catch(err => alert("ایرر: " + err.message));
-    }
-}
-
-function editReceipt(id) {
-    const r = receipts.find(item => item.id === id);
-    if (!r) return;
-
-    editingReceiptId = id;
-    document.getElementById("madarsa").value = r.madarsa || "";
-    document.getElementById("jild").value = r.jild || "";
-    document.getElementById("safha").value = r.safha || "";
-    document.getElementById("receipt").value = r.receipt || "";
-    document.getElementById("date").value = r.date || "";
-    document.getElementById("name").value = r.name || "";
-    document.getElementById("mobile").value = r.mobile || "";
-    document.getElementById("address").value = r.address || "";
-    document.getElementById("type").value = r.type || "عام چندہ";
-    document.getElementById("amount").value = r.amount || "";
-
-    const cancelBtn = document.getElementById("cancelEditBtn");
-    if(cancelBtn) cancelBtn.style.display = "block";
     
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    renderReceipts(allReceipts);
+    updateSummaryAndChart(allReceipts);
+  } catch (err) {
+    console.error("డేటా لو کرنے میں مسئلہ:", err);
+  }
 }
 
-function deleteReceipt(id) {
-    if (!confirm("کیا آپ واقعی اس رسید کو حذف کرنا چاہتے ہیں؟")) return;
-    db.collection("receipts").doc(id).delete().then(() => {
-        alert("رسید حذف ہو گئی!");
-    }).catch(err => alert("ایرر: " + err.message));
+// Render Receipts to UI
+function renderReceipts(receipts) {
+  const container = document.getElementById('receipts-list');
+  container.innerHTML = '';
+
+  if (receipts.length === 0) {
+    container.innerHTML = '<p style="text-align:center;">کوئی رسید نہیں ملی۔</p>';
+    return;
+  }
+
+  receipts.forEach(r => {
+    const card = document.createElement('div');
+    card.className = 'receipt-item';
+    card.innerHTML = `
+      <div class="receipt-header">
+        <span>رسید # ${r.receiptNo}</span>
+        <span>₹ ${r.amount}</span>
+      </div>
+      <div><strong>نام:</strong> ${r.donorName}</div>
+      <div><strong>مد:</strong> ${r.type} | <strong>تاریخ:</strong> ${r.date}</div>
+      <div class="receipt-actions">
+        <button onclick="deleteReceipt('${r.id}')" class="btn btn-danger btn-sm">حذف کریں</button>
+      </div>
+    `;
+    container.appendChild(card);
+  });
 }
 
-function resetForm() {
-    const form = document.getElementById("receiptForm");
-    if(form) form.reset();
-    editingReceiptId = null;
-    const cancelBtn = document.getElementById("cancelEditBtn");
-    if (cancelBtn) cancelBtn.style.display = "none";
+// Delete Receipt
+window.deleteReceipt = async function(id) {
+  if (confirm("کیا آپ اس رسید کو ڈیلیٹ کرنا چاہتے ہیں؟")) {
+    try {
+      await deleteDoc(doc(db, "receipts", id));
+      alert("رسید ڈیلیٹ ہو گئی!");
+      loadReceipts();
+    } catch (err) {
+      alert("ڈیلیٹ کرنے میں مسئلہ: " + err.message);
+    }
+  }
+};
+
+// Search Filter
+document.getElementById('search-input').addEventListener('input', (e) => {
+  const queryText = e.target.value.toLowerCase();
+  const filtered = allReceipts.filter(r => 
+    r.receiptNo.toLowerCase().includes(queryText) || 
+    r.donorName.toLowerCase().includes(queryText)
+  );
+  renderReceipts(filtered);
+});
+
+// Summary & Chart Update
+function updateSummaryAndChart(receipts) {
+  const totalCount = receipts.length;
+  const totalAmt = receipts.reduce((sum, r) => sum + r.amount, 0);
+
+  document.getElementById('total-receipts').innerText = totalCount;
+  document.getElementById('total-amount').innerText = totalAmt;
+
+  // Group amounts by Type for Chart
+  const typeTotals = {};
+  receipts.forEach(r => {
+    typeTotals[r.type] = (typeTotals[r.type] || 0) + r.amount;
+  });
+
+  const ctx = document.getElementById('donationChart').getContext('2d');
+  if (donationChart) donationChart.destroy();
+
+  donationChart = new Chart(ctx, {
+    type: 'pie',
+    data: {
+      labels: Object.keys(typeTotals),
+      datasets: [{
+        data: Object.values(typeTotals),
+        backgroundColor: ['#007bff', '#28a745', '#ffc107', '#dc3545']
+      }]
+    }
+  });
 }
 
-document.getElementById("searchBox")?.addEventListener("input", function (e) {
-    const query = e.target.value.toLowerCase().trim();
-    const filtered = receipts.filter(r => 
-        (r.name && r.name.toLowerCase().includes(query)) ||
-        (r.receipt && r.receipt.toString().includes(query)) ||
-        (r.mobile && r.mobile.includes(query))
-    );
-    renderRegisterTable(filtered);
+// --- OCR Functionality (Tesseract.js) ---
+document.getElementById('scan-ocr-btn').onclick = async () => {
+  const fileInput = document.getElementById('receipt-image');
+  if (!fileInput.files || fileInput.files.length === 0) {
+    alert("براہ کرم پہلے رسید کی تصویر چنیں۔");
+    return;
+  }
+  
+  const file = fileInput.files[0];
+  alert("تصویر اسکین کی جا رہی ہے، براہ کرم چند سیکنڈ انتظار کریں...");
+
+  try {
+    const result = await Tesseract.recognize(file, 'eng');
+    console.log("OCR Text:", result.data.text);
+    alert("اسکین مکمل ہو گیا! متن پڑھا گیا:\n" + result.data.text.substring(0, 100) + "...");
+  } catch (err) {
+    alert("OCR میں غلطی: " + err.message);
+  }
+};
+
+// --- Backup & Restore ---
+document.getElementById('backup-btn').onclick = () => {
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(allReceipts));
+  const downloadAnchor = document.createElement('a');
+  downloadAnchor.setAttribute("href", dataStr);
+  downloadAnchor.setAttribute("download", `madrasa_backup_${new Date().toISOString().slice(0,10)}.json`);
+  document.body.appendChild(downloadAnchor);
+  downloadAnchor.click();
+  downloadAnchor.remove();
+};
+
+document.getElementById('restore-btn').onclick = () => {
+  document.getElementById('restore-file').click();
+};
+
+document.getElementById('restore-file').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = async (evt) => {
+    try {
+      const importedData = JSON.parse(evt.target.result);
+      if (Array.isArray(importedData)) {
+        for (let r of importedData) {
+          delete r.id; // Delete old ID to create new entry
+          r.userId = currentUser.uid;
+          await addDoc(collection(db, "receipts"), r);
+        }
+        alert("بیک اپ کامیابی سے بحال ہو گیا!");
+        loadReceipts();
+      }
+    } catch (err) {
+      alert("فائل غلط ہے: " + err.message);
+    }
+  };
+  reader.readAsText(file);
 });
