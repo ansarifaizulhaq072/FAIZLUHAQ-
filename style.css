@@ -1,188 +1,396 @@
-:root {
-  --primary-color: #007bff;
-  --success-color: #28a745;
-  --warning-color: #ffc107;
-  --danger-color: #dc3545;
-  --info-color: #17a2b8;
-  --bg-color: #f4f6f9;
-  --card-bg: #ffffff;
-  --text-color: #333333;
-}
+/* =========================================
+   بنیادی سیٹنگز
+========================================= */
 
 * {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    direction: rtl;
 }
 
 body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: var(--bg-color);
-  color: var(--text-color);
-  direction: rtl;
-  padding: 15px;
+    margin: 0;
+    padding: 0;
+    background: #f3f6f8;
+    color: #222;
+    font-family:
+        Arial,
+        "Noto Nastaliq Urdu",
+        sans-serif;
+    line-height: 1.7;
 }
 
-.container {
-  max-width: 600px;
-  margin: 0 auto;
+
+/* =========================================
+   APP
+========================================= */
+
+#app {
+    width: 100%;
+    min-height: 100vh;
 }
 
-.card {
-  background: var(--card-bg);
-  border-radius: 10px;
-  padding: 20px;
-  margin-bottom: 20px;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
-}
 
-h1, h2 {
-  margin-bottom: 15px;
-  color: #1a1a1a;
-  text-align: center;
-}
-
-.form-group {
-  margin-bottom: 15px;
-}
-
-label {
-  display: block;
-  margin-bottom: 6px;
-  font-weight: 600;
-  font-size: 14px;
-}
-
-input, select {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid #cccccc;
-  border-radius: 6px;
-  font-size: 15px;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-input:focus, select:focus {
-  border-color: var(--primary-color);
-}
-
-.form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.btn {
-  display: inline-block;
-  width: 100%;
-  padding: 12px;
-  border: none;
-  border-radius: 6px;
-  font-size: 16px;
-  font-weight: bold;
-  color: #ffffff;
-  cursor: pointer;
-  text-align: center;
-  margin-top: 10px;
-  transition: opacity 0.2s;
-}
-
-.btn:hover {
-  opacity: 0.9;
-}
-
-.btn-primary { background-color: var(--primary-color); }
-.btn-success { background-color: var(--success-color); }
-.btn-warning { background-color: var(--warning-color); color: #000; }
-.btn-danger { background-color: var(--danger-color); }
-.btn-info { background-color: var(--info-color); }
-.btn-secondary { background-color: #6c757d; }
-
-.btn-sm {
-  padding: 6px 12px;
-  font-size: 13px;
-  width: auto;
-}
-
-.auth-links {
-  margin-top: 15px;
-  text-align: center;
-  font-size: 13px;
-}
-
-.auth-links a {
-  color: var(--primary-color);
-  text-decoration: none;
-}
+/* =========================================
+   HEADER
+========================================= */
 
 .app-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
+    background: #ffffff;
+    padding: 25px 15px;
+    text-align: center;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
 }
 
-.search-box {
-  margin-bottom: 15px;
+.app-header h1 {
+    margin: 0 0 5px;
+    font-size: 27px;
 }
 
-.receipts-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.app-header p {
+    margin: 0;
+    color: #777;
+    font-size: 14px;
 }
+
+
+/* =========================================
+   SECTIONS
+========================================= */
+
+.screen-section {
+    width: 94%;
+    max-width: 700px;
+    margin: 20px auto;
+}
+
+
+/* =========================================
+   CARD
+========================================= */
+
+.card {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow:
+        0 3px 14px rgba(0, 0, 0, 0.08);
+}
+
+.card h2 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 22px;
+}
+
+
+/* =========================================
+   TEXT
+========================================= */
+
+.info-text {
+    margin-top: 0;
+    color: #666;
+    font-size: 14px;
+}
+
+
+/* =========================================
+   UPLOAD BOX
+========================================= */
+
+.upload-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    min-height: 180px;
+
+    border: 2px dashed #1677ff;
+    border-radius: 14px;
+
+    background: #f7faff;
+
+    color: #1677ff;
+
+    text-align: center;
+
+    padding: 20px;
+
+    cursor: pointer;
+
+    transition: 0.2s;
+}
+
+.upload-box:hover {
+    background: #eef5ff;
+}
+
+.upload-icon {
+    font-size: 48px;
+    margin-bottom: 8px;
+}
+
+
+/* =========================================
+   PHOTO PREVIEW
+========================================= */
+
+.photo-preview-box {
+    margin-top: 15px;
+    text-align: center;
+}
+
+.photo-preview-box img {
+    width: 100%;
+    max-height: 400px;
+    object-fit: contain;
+
+    border-radius: 12px;
+    border: 1px solid #ddd;
+
+    background: #f5f5f5;
+}
+
+
+/* =========================================
+   BUTTONS
+========================================= */
+
+.btn {
+    width: 100%;
+
+    border: none;
+    border-radius: 10px;
+
+    padding: 13px 16px;
+
+    margin-top: 12px;
+
+    font-size: 16px;
+    font-weight: bold;
+
+    cursor: pointer;
+
+    transition:
+        opacity 0.2s,
+        transform 0.1s;
+}
+
+.btn:active {
+    transform: scale(0.98);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background: #1677ff;
+    color: #ffffff;
+}
+
+.btn-success {
+    background: #168a45;
+    color: #ffffff;
+}
+
+.btn-secondary {
+    background: #666666;
+    color: #ffffff;
+}
+
+
+/* =========================================
+   FORM
+========================================= */
+
+label {
+    display: block;
+
+    margin-top: 13px;
+    margin-bottom: 5px;
+
+    font-weight: bold;
+}
+
+input,
+textarea,
+select {
+    width: 100%;
+
+    padding: 12px;
+
+    border: 1px solid #ccc;
+    border-radius: 9px;
+
+    background: #ffffff;
+
+    font-family: inherit;
+    font-size: 16px;
+
+    outline: none;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    border-color: #1677ff;
+    box-shadow:
+        0 0 0 2px rgba(22, 119, 255, 0.10);
+}
+
+textarea {
+    min-height: 90px;
+    resize: vertical;
+}
+
+
+/* =========================================
+   TWO COLUMN FORM
+========================================= */
+
+.form-row {
+    display: grid;
+
+    grid-template-columns:
+        repeat(2, minmax(0, 1fr));
+
+    gap: 12px;
+}
+
+
+/* =========================================
+   OCR STATUS
+========================================= */
+
+.status-box {
+    margin-top: 12px;
+
+    min-height: 20px;
+
+    padding: 8px;
+
+    border-radius: 8px;
+
+    text-align: center;
+
+    font-size: 14px;
+}
+
+
+/* =========================================
+   DUPLICATE WARNING
+========================================= */
+
+.duplicate-box {
+    margin-top: 15px;
+
+    padding: 13px;
+
+    border-radius: 10px;
+
+    background: #fff4e5;
+
+    border: 1px solid #f0a000;
+
+    color: #7a4b00;
+
+    font-weight: bold;
+}
+
+
+/* =========================================
+   REGISTER
+========================================= */
+
+.register-list {
+    margin-top: 15px;
+}
+
+.empty-state {
+    padding: 30px 10px;
+
+    text-align: center;
+
+    color: #777;
+
+    background: #f7f7f7;
+
+    border-radius: 10px;
+}
+
+
+/* =========================================
+   RECEIPT CARD
+========================================= */
 
 .receipt-item {
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 12px;
-  background: #fafafa;
+    background: #ffffff;
+
+    border: 1px solid #ddd;
+
+    border-radius: 12px;
+
+    padding: 15px;
+
+    margin-bottom: 12px;
 }
 
-.receipt-header {
-  display: flex;
-  justify-content: space-between;
-  font-weight: bold;
-  border-bottom: 1px solid #eee;
-  padding-bottom: 5px;
-  margin-bottom: 8px;
+.receipt-item h3 {
+    margin-top: 0;
+    margin-bottom: 8px;
 }
 
-.receipt-actions {
-  display: flex;
-  gap: 5px;
-  margin-top: 10px;
+.receipt-item p {
+    margin: 5px 0;
 }
 
-.summary-grid {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 15px;
+
+/* =========================================
+   HIDDEN
+========================================= */
+
+[hidden] {
+    display: none !important;
 }
 
-.summary-box {
-  flex: 1;
-  background: #f0f4f8;
-  padding: 12px;
-  border-radius: 8px;
-  text-align: center;
-  font-weight: bold;
-  font-size: 15px;
-}
 
-.chart-container {
-  position: relative;
-  width: 100%;
-  max-height: 250px;
-}
+/* =========================================
+   MOBILE
+========================================= */
 
-.action-buttons {
-  display: flex;
-  gap: 10px;
-}
+@media (max-width: 600px) {
 
-.hidden {
-  display: none !important;
+    .screen-section {
+        width: 96%;
+        margin-top: 15px;
+    }
+
+    .card {
+        padding: 16px;
+    }
+
+    .app-header {
+        padding: 20px 12px;
+    }
+
+    .app-header h1 {
+        font-size: 23px;
+    }
+
+    .form-row {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+
+    .upload-box {
+        min-height: 160px;
+    }
+
 }
