@@ -1,0 +1,10 @@
+{
+  "name": "مدرسہ مینجمنٹ سسٹم",
+  "short_name": "مدرسہ مینجمنٹ",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f5f7f7",
+  "theme_color": "#0f766e",
+  "lang": "ur",
+  "dir": "rtl"
+}

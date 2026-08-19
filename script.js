@@ -1,4939 +1,2643 @@
+"use strict";
 
-(function () {
+/* =========================================================
+   مدرسہ مینجمنٹ سسٹم
+   Login → مدرسہ → شعبے → Donation
+   Firebase + LocalStorage
+   ========================================================= */
 
-    "use strict";
 
-    console.log(
-        "رسید محفوظ نظام: Script لوڈ ہو رہی ہے..."
+/* =========================================================
+   Helper
+   ========================================================= */
+
+const $ = (id) => document.getElementById(id);
+
+
+/* =========================================================
+   Storage / Firebase
+   ========================================================= */
+
+const STORAGE_KEY = "madrasa_v1_records";
+const OLD_STORAGE_KEY = "receipts";
+const FIREBASE_COLLECTION = "receipts";
+
+
+/*
+  IMPORTANT:
+  db پہلے ہی index.html میں بنایا گیا ہے۔
+
+  index.html میں:
+  const db = firebase.firestore();
+
+  موجود ہے۔
+*/
+
+
+let records = [];
+
+
+/* =========================================================
+   موجودہ مدرسہ
+   ========================================================= */
+
+let currentMadarsa = "دارالعلوم میوانوادہ";
+
+
+/* =========================================================
+   ID بنانا
+   ========================================================= */
+
+function createId() {
+
+  return (
+    Date.now().toString(36) +
+    Math.random()
+      .toString(36)
+      .slice(2, 8)
+  );
+
+}
+
+
+/* =========================================================
+   پرانا LocalStorage Data Load
+   ========================================================= */
+
+function loadLocalRecords() {
+
+  let newRecords = [];
+  let oldRecords = [];
+
+
+  /* -------------------------------------------------------
+     نیا Storage
+     ------------------------------------------------------- */
+
+  try {
+
+    newRecords =
+      JSON.parse(
+        localStorage.getItem(STORAGE_KEY) || "[]"
+      );
+
+    if (!Array.isArray(newRecords)) {
+
+      newRecords = [];
+
+    }
+
+  }
+
+  catch (error) {
+
+    console.error(
+      "نیا LocalStorage Data پڑھنے میں مسئلہ:",
+      error
     );
 
+    newRecords = [];
 
-    // ========================================================
-    // GLOBAL APP OBJECT
-    // ========================================================
-
-    window.ReceiptSystem =
-        window.ReceiptSystem || {};
-const app =
-    window.ReceiptSystem;
-  
-
-    // ========================================================
-    // APPLICATION STATE
-    // ========================================================
-
-    const state = {
-
-        records: [],
-
-        editIndex: -1,
-
-        ocrRunning: false,
-
-        selectedImage: "",
-
-        currentOCRText: "",
-
-        searchText: ""
-
-    };
+  }
 
 
-    // ========================================================
-    // STORAGE KEY
-    // ========================================================
 
-    const STORAGE_KEY =
-        "receiptRecords";
+  /* -------------------------------------------------------
+     پرانا Storage
+     ------------------------------------------------------- */
 
+  try {
 
-    // ========================================================
-    // OLD STORAGE KEY
-    // ========================================================
+    oldRecords =
+      JSON.parse(
+        localStorage.getItem(OLD_STORAGE_KEY) || "[]"
+      );
 
-    const OLD_STORAGE_KEY =
-        "receipts";
+    if (!Array.isArray(oldRecords)) {
 
-
-    // ========================================================
-    // ELEMENTS
-    // ========================================================
-
-    const elements = {};
-
-
-    // ========================================================
-    // GET ELEMENT
-    // ========================================================
-
-    function el(id) {
-
-        return document.getElementById(id);
+      oldRecords = [];
 
     }
 
+  }
 
-    // ========================================================
-    // CACHE HTML ELEMENTS
-    // ========================================================
+  catch (error) {
 
-    function cacheElements() {
+    console.error(
+      "پرانا LocalStorage Data پڑھنے میں مسئلہ:",
+      error
+    );
 
-        elements.receiptPhoto =
-            el("receiptPhoto");
+    oldRecords = [];
 
-        elements.previewBox =
-            el("previewBox");
+  }
 
-        elements.receiptPreview =
-            el("receiptPreview");
 
-        elements.scanBtn =
-            el("scanBtn");
 
-        elements.ocrStatus =
-            el("ocrStatus");
+  /* -------------------------------------------------------
+     پرانے records کو نئے format میں تبدیل کریں
+     ------------------------------------------------------- */
 
-        elements.ocrText =
-            el("ocrText");
-
-        elements.madarsa =
-            el("madarsa");
-
-        elements.jild =
-            el("jild");
-
-        elements.safha =
-            el("safha");
-
-        elements.receiptNumber =
-            el("receiptNumber");
-
-        elements.date =
-            el("date");
-
-        elements.donorName =
-            el("donorName");
-
-        elements.mobile =
-            el("mobile");
-
-        elements.address =
-            el("address");
-
-        elements.donationType =
-            el("donationType");
-
-        elements.amount =
-            el("amount");
-
-        elements.duplicateWarning =
-            el("duplicateWarning");
-
-        elements.saveBtn =
-            el("saveBtn");
-
-        elements.clearBtn =
-            el("clearBtn");
-
-        elements.searchBox =
-            el("searchBox");
-
-        elements.recordsList =
-            el("recordsList");
-
-    }
-
-
-    // ========================================================
-    // BASIC STRING CLEANER
-    // ========================================================
-
-    function cleanString(value) {
-
-        if (
-            value === null ||
-            value === undefined
-        ) {
-
-            return "";
-
-        }
-
-        return String(value).trim();
-
-    }
-
-
-    // ========================================================
-    // URDU / ARABIC DIGITS TO ENGLISH
-    // ========================================================
-
-    function normalizeDigits(value) {
-
-        const map = {
-
-            "۰": "0",
-            "۱": "1",
-            "۲": "2",
-            "۳": "3",
-            "۴": "4",
-            "۵": "5",
-            "۶": "6",
-            "۷": "7",
-            "۸": "8",
-            "۹": "9"
-
-        };
-
-
-        let text =
-            cleanString(value);
-
-
-        text =
-            text.replace(
-                /[۰-۹]/g,
-                function (digit) {
-
-                    return map[digit];
-
-                }
-            );
-
-
-        text =
-            text.replace(
-                /[٠-٩]/g,
-                function (digit) {
-
-                    return String(
-                        "٠١٢٣٤٥٦٧٨٩"
-                            .indexOf(digit)
-                    );
-
-                }
-            );
-
-
-        return text;
-
-    }
-
-
-    // ========================================================
-    // NORMALIZE TEXT
-    // ========================================================
-
-    function normalizeText(text) {
-
-        return normalizeDigits(text)
-            .replace(/\r/g, "\n")
-            .replace(/[ \t]+/g, " ")
-            .replace(/\n{3,}/g, "\n\n")
-            .trim();
-
-    }
-
-
-    // ========================================================
-    // HTML ESCAPE
-    // ========================================================
-
-    function escapeHTML(value) {
-
-        return cleanString(value)
-
-            .replace(
-                /&/g,
-                "&amp;"
-            )
-
-            .replace(
-                /</g,
-                "&lt;"
-            )
-
-            .replace(
-                />/g,
-                "&gt;"
-            )
-
-            .replace(
-                /"/g,
-                "&quot;"
-            )
-
-            .replace(
-                /'/g,
-                "&#039;"
-            );
-
-    }
-
-
-    // ========================================================
-    // CREATE UNIQUE RECORD ID
-    // ========================================================
-
-    function createRecordId() {
-
-        return (
-            Date.now().toString(36) +
-            Math.random()
-                .toString(36)
-                .slice(2, 9)
-        );
-
-    }
-
-
-    // ========================================================
-    // FORMAT AMOUNT
-    // ========================================================
-
-    function formatAmount(value) {
-
-        const number =
-            Number(value);
-
-
-        if (
-            Number.isFinite(number)
-        ) {
-
-            return number.toLocaleString(
-                "en-IN"
-            );
-
-        }
-
-
-        return cleanString(value);
-
-    }
-
-
-    // ========================================================
-    // OCR STATUS
-    // ========================================================
-
-    function setOCRStatus(message) {
-
-        if (
-            !elements.ocrStatus
-        ) {
-
-            return;
-
-        }
-
-
-        elements.ocrStatus.textContent =
-            message || "";
-
-
-        elements.ocrStatus.className =
-            "status";
-
-
-        const text =
-            String(message || "");
-
-
-        if (
-            text.includes("⚠️") ||
-            text.includes("❌")
-        ) {
-
-            elements.ocrStatus.classList.add(
-                "warning"
-            );
-
-        }
-
-
-        if (
-            text.includes("✅")
-        ) {
-
-            elements.ocrStatus.classList.add(
-                "success-message"
-            );
-
-        }
-
-    }
-
-
-    // ========================================================
-    // NORMALIZE RECORD
-    // ========================================================
-
-    function normalizeRecord(record) {
-
-        record =
-            record || {};
-
+  const migratedOldRecords =
+    oldRecords.map(
+      (old, index) => {
 
         return {
 
-            id:
-                record.id ||
-                createRecordId(),
+          id:
+            old.id ||
+            `old-${Date.now()}-${index}`,
 
-            madarsa:
-                cleanString(
-                    record.madarsa ||
-                    record.madrasa
-                ),
+          madrasa:
+            old.madrasa ||
+            old.madarsa ||
+            "دارالعلوم میوانوادہ",
 
-            jild:
-                cleanString(
-                    record.jild
-                ),
+          volume:
+            Number(
+              old.volume ??
+              old.jild ??
+              0
+            ),
 
-            safha:
-                cleanString(
-                    record.safha
-                ),
+          page:
+            Number(
+              old.page ??
+              old.safha ??
+              0
+            ),
 
-            receiptNumber:
-                cleanString(
-                    record.receiptNumber ||
-                    record.receipt
-                ),
+          no:
+            Number(
+              old.no ??
+              old.receipt ??
+              0
+            ),
 
-            date:
-                cleanString(
-                    record.date
-                ),
+          date:
+            old.date ||
+            "",
 
-            donorName:
-                cleanString(
-                    record.donorName ||
-                    record.name
-                ),
+          name:
+            old.name ||
+            "",
 
-            mobile:
-                cleanString(
-                    record.mobile
-                ),
+          mobile:
+            old.mobile ||
+            "",
 
-            address:
-                cleanString(
-                    record.address
-                ),
+          address:
+            old.address ||
+            "",
 
-            donationType:
-                cleanString(
-                    record.donationType ||
-                    record.type
-                ),
+          amount:
+            Number(
+              old.amount ||
+              0
+            ),
 
-            amount:
-                Number(
-                    record.amount || 0
-                ),
+          type:
+            old.type ||
+            "عام چندہ",
 
-            photo:
-                cleanString(
-                    record.photo ||
-                    record.currentImage
-                )
+          photo:
+            old.photo ||
+            old.image ||
+            ""
 
         };
 
-    }
-
-
-    // ========================================================
-    // SAVE RECORDS TO LOCAL STORAGE
-    // ========================================================
-
-    function saveRecordsToStorage() {
-
-        try {
-
-            localStorage.setItem(
-
-                STORAGE_KEY,
-
-                JSON.stringify(
-                    state.records
-                )
-
-            );
-
-
-            return true;
-
-        } catch (error) {
-
-            console.error(
-                "Records Storage Error:",
-                error
-            );
-
-
-            setOCRStatus(
-                "❌ رسیدیں محفوظ کرنے میں مسئلہ آیا۔"
-            );
-
-
-            return false;
-
-        }
-
-    }
-
-
-    // ========================================================
-    // LOAD RECORDS FROM LOCAL STORAGE
-    // ========================================================
-
-    function loadRecordsFromStorage() {
-
-        try {
-
-            let saved =
-                localStorage.getItem(
-                    STORAGE_KEY
-                );
-
-
-            // ------------------------------------------------
-            // اگر نئی جگہ ڈیٹا نہیں ہے تو پرانے receipts
-            // سے موجودہ ریکارڈ ایک بار منتقل کریں
-            // ------------------------------------------------
-
-            if (!saved) {
-
-                const oldSaved =
-                    localStorage.getItem(
-                        OLD_STORAGE_KEY
-                    );
-
-
-                if (oldSaved) {
-
-                    const oldRecords =
-                        JSON.parse(
-                            oldSaved
-                        );
-
-
-                    if (
-                        Array.isArray(
-                            oldRecords
-                        )
-                    {
-
-                        state.records =
-                            oldRecords.map(
-                                normalizeRecord
-                            );
-
-
-                        saveRecordsToStorage();
-
-
-                        console.log(
-                            "پرانے receipts ڈیٹا سے " +
-                            state.records.length +
-                            " ریکارڈ منتقل ہوگئے۔"
-                        );
-
-
-                        return;
-
-                    }
-
-                }
-
-
-                state.records = [];
-
-                return;
-
-            }
-
-
-            // ------------------------------------------------
-            // JSON READ
-            // ------------------------------------------------
-
-            const parsed =
-                JSON.parse(
-                    saved
-                );
-
-
-            if (
-                Array.isArray(
-                    parsed
-                )
-            ) {
-
-                state.records =
-                    parsed.map(
-                        normalizeRecord
-                    );
-
-            } else {
-
-                state.records = [];
-
-            }
-
-
-        } catch (error) {
-
-            console.error(
-                "Records Load Error:",
-                error
-            );
-
-
-            state.records = [];
-
-        }
-
-    }
-
-
-    // ========================================================
-    // GLOBAL APP API
-    // ========================================================
-
-    app.state =
-        state;
-
-
-    app.elements =
-        elements;
-
-
-    app.STORAGE_KEY =
-        STORAGE_KEY;
-
-
-    app.saveRecordsToStorage =
-        saveRecordsToStorage;
-
-
-    app.loadRecordsFromStorage =
-        loadRecordsFromStorage;
-
-
-    app.setOCRStatus =
-        setOCRStatus;
-
-
-    // ========================================================
-    // PART 1 END
-    // ========================================================
-
-    console.log(
-        "✅ SCRIPT حصہ 1 تیار ہے۔"
+      }
     );
 
 
-// ============================================================
-// SCRIPT.JS — حصہ 2 / 8
-// Form + Image Preview + Clear + Duplicate Check
-// ============================================================
 
+  /* -------------------------------------------------------
+     نیا + پرانا LocalStorage Data ملائیں
+     ------------------------------------------------------- */
 
-// ========================================================
-// GET CURRENT FORM DATA
-// ========================================================
+  const combined = [
+    ...newRecords
+  ];
 
-function getFormData() {
 
-    return {
+  migratedOldRecords.forEach(
+    (oldRecord) => {
 
-        id:
-            state.editIndex >= 0 &&
-            state.records[state.editIndex]
-                ? state.records[state.editIndex].id
-                : createRecordId(),
+      const exists =
+        combined.some(
+          (record) => {
 
-        madarsa:
-            cleanString(
-                elements.madarsa?.value
-            ),
+            return (
 
-        jild:
-            cleanString(
-                elements.jild?.value
-            ),
+              String(
+                record.madrasa || ""
+              ) ===
+              String(
+                oldRecord.madrasa || ""
+              )
 
-        safha:
-            cleanString(
-                elements.safha?.value
-            ),
+              &&
 
-        receiptNumber:
-            normalizeDigits(
-                elements.receiptNumber?.value
-            ),
+              Number(
+                record.volume || 0
+              ) ===
+              Number(
+                oldRecord.volume || 0
+              )
 
-        date:
-            cleanString(
-                elements.date?.value
-            ),
+              &&
 
-        donorName:
-            cleanString(
-                elements.donorName?.value
-            ),
+              Number(
+                record.no || 0
+              ) ===
+              Number(
+                oldRecord.no || 0
+              )
 
-        mobile:
-            normalizeDigits(
-                elements.mobile?.value
-            ),
+            );
 
-        address:
-            cleanString(
-                elements.address?.value
-            ),
-
-        donationType:
-            cleanString(
-                elements.donationType?.value
-            ),
-
-        amount:
-            Number(
-                elements.amount?.value || 0
-            ),
-
-        photo:
-            state.selectedImage || ""
-
-    };
-
-}
-
-
-// ========================================================
-// FILL FORM
-// ========================================================
-
-function fillForm(record) {
-
-    if (!record) {
-
-        return;
-
-    }
-
-
-    if (elements.madarsa) {
-
-        elements.madarsa.value =
-            record.madarsa || "";
-
-    }
-
-
-    if (elements.jild) {
-
-        elements.jild.value =
-            record.jild || "";
-
-    }
-
-
-    if (elements.safha) {
-
-        elements.safha.value =
-            record.safha || "";
-
-    }
-
-
-    if (elements.receiptNumber) {
-
-        elements.receiptNumber.value =
-            record.receiptNumber || "";
-
-    }
-
-
-    if (elements.date) {
-
-        elements.date.value =
-            record.date || "";
-
-    }
-
-
-    if (elements.donorName) {
-
-        elements.donorName.value =
-            record.donorName || "";
-
-    }
-
-
-    if (elements.mobile) {
-
-        elements.mobile.value =
-            record.mobile || "";
-
-    }
-
-
-    if (elements.address) {
-
-        elements.address.value =
-            record.address || "";
-
-    }
-
-
-    if (elements.donationType) {
-
-        elements.donationType.value =
-            record.donationType || "";
-
-    }
-
-
-    if (elements.amount) {
-
-        elements.amount.value =
-            record.amount || "";
-
-    }
-
-
-    state.selectedImage =
-        record.photo || "";
-
-
-    if (record.photo) {
-
-        showImagePreview(
-            record.photo
+          }
         );
 
+
+      if (!exists) {
+
+        combined.push(oldRecord);
+
+      }
+
     }
+  );
+
+
+  records = combined;
+
+
+  /* -------------------------------------------------------
+     LocalStorage backup
+     ------------------------------------------------------- */
+
+  try {
+
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(records)
+    );
+
+  }
+
+  catch (error) {
+
+    console.error(
+      "LocalStorage save error:",
+      error
+    );
+
+  }
+
+
+  console.log(
+    "LocalStorage سے records:",
+    records.length
+  );
+
+
+  return records;
 
 }
 
 
-// ========================================================
-// CLEAR FORM
-// ========================================================
+/* =========================================================
+   Firebase سے Records Load
+   ========================================================= */
 
-function clearForm() {
+async function loadFirebaseRecords() {
 
-    const fields = [
+  try {
 
-        elements.madarsa,
-        elements.jild,
-        elements.safha,
-        elements.receiptNumber,
-        elements.date,
-        elements.donorName,
-        elements.mobile,
-        elements.address,
-        elements.donationType,
-        elements.amount
-
-    ];
+    console.log(
+      "Firebase سے رسیدیں تلاش کی جا رہی ہیں..."
+    );
 
 
-    fields.forEach(
-        function (field) {
+    const snapshot =
+      await db
+        .collection(FIREBASE_COLLECTION)
+        .get();
 
-            if (field) {
 
-                field.value = "";
+    const firebaseRecords = [];
+
+
+    snapshot.forEach(
+      (doc) => {
+
+        const data =
+          doc.data();
+
+
+        const record = {
+
+          id:
+            doc.id,
+
+          madrasa:
+            data.madrasa ||
+            data.madarsa ||
+            "دارالعلوم میوانوادہ",
+
+          volume:
+            Number(
+              data.volume ??
+              data.jild ??
+              0
+            ),
+
+          page:
+            Number(
+              data.page ??
+              data.safha ??
+              0
+            ),
+
+          no:
+            Number(
+              data.no ??
+              data.receipt ??
+              0
+            ),
+
+          date:
+            data.date ||
+            "",
+
+          name:
+            data.name ||
+            "",
+
+          mobile:
+            data.mobile ||
+            "",
+
+          address:
+            data.address ||
+            "",
+
+          amount:
+            Number(
+              data.amount ||
+              0
+            ),
+
+          type:
+            data.type ||
+            "عام چندہ",
+
+          photo:
+            data.photo ||
+            data.image ||
+            ""
+
+        };
+
+
+        firebaseRecords.push(record);
+
+      }
+    );
+
+
+    console.log(
+      "Firebase سے کل رسیدیں:",
+      firebaseRecords.length
+    );
+
+
+    /* -------------------------------------------------------
+       Firebase records کو Local records کے ساتھ ملائیں
+       ------------------------------------------------------- */
+
+    firebaseRecords.forEach(
+      (firebaseRecord) => {
+
+        const exists =
+          records.some(
+            (record) => {
+
+              return (
+
+                String(
+                  record.madrasa || ""
+                ) ===
+                String(
+                  firebaseRecord.madrasa || ""
+                )
+
+                &&
+
+                Number(
+                  record.volume || 0
+                ) ===
+                Number(
+                  firebaseRecord.volume || 0
+                )
+
+                &&
+
+                Number(
+                  record.no || 0
+                ) ===
+                Number(
+                  firebaseRecord.no || 0
+                )
+
+              );
 
             }
+          );
+
+
+        if (!exists) {
+
+          records.push(
+            firebaseRecord
+          );
 
         }
+
+      }
     );
 
 
-    state.editIndex =
-        -1;
+    /* -------------------------------------------------------
+       Local backup update
+       ------------------------------------------------------- */
 
-
-    state.selectedImage =
-        "";
-
-
-    state.currentOCRText =
-        "";
-
-
-    if (elements.receiptPhoto) {
-
-        elements.receiptPhoto.value =
-            "";
-
-    }
-
-
-    if (elements.previewBox) {
-
-        elements.previewBox.style.display =
-            "none";
-
-    }
-
-
-    if (elements.receiptPreview) {
-
-        elements.receiptPreview.src =
-            "";
-
-    }
-
-
-    if (elements.ocrText) {
-
-        elements.ocrText.textContent =
-            "ابھی کوئی متن نہیں۔";
-
-    }
-
-
-    hideDuplicateWarning();
-
-
-    if (elements.saveBtn) {
-
-        elements.saveBtn.textContent =
-            "💾 رسید محفوظ کریں";
-
-    }
-
-
-    setOCRStatus(
-        "فارم صاف ہوگیا۔"
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(records)
     );
+
+
+    console.log(
+      "Firebase Data records میں شامل ہوگیا:",
+      records.length
+    );
+
+
+    /*
+      Donation screen اگر کھلی ہوئی ہے
+      تو فوراً دوبارہ دکھائیں
+    */
+
+    if (
+      typeof render === "function"
+    ) {
+
+      render();
+
+    }
+
+
+  }
+
+  catch (error) {
+
+    console.error(
+      "Firebase data load error:",
+      error
+    );
+
+
+    console.error(
+      "Firebase error code:",
+      error.code
+    );
+
+
+    console.error(
+      "Firebase error message:",
+      error.message
+    );
+
+  }
 
 }
 
 
-// ========================================================
-// SHOW IMAGE PREVIEW
-// ========================================================
+/* =========================================================
+   پہلے Local Data Load
+   ========================================================= */
 
-function showImagePreview(fileOrData) {
+loadLocalRecords();
+
+
+/* =========================================================
+   پھر Firebase Data Load
+   ========================================================= */
+
+loadFirebaseRecords();
+
+
+/* =========================================================
+   Screen System
+   ========================================================= */
+
+function showScreen(screenId) {
+
+  const screens = [
+
+    "loginScreen",
+
+    "schoolScreen",
+
+    "mainScreen",
+
+    "donationScreen"
+
+  ];
+
+
+  screens.forEach(
+    (id) => {
+
+      const element =
+        $(id);
+
+
+      if (element) {
+
+        element.classList.add(
+          "hidden"
+        );
+
+      }
+
+    }
+  );
+
+
+  const target =
+    $(screenId);
+
+
+  if (target) {
+
+    target.classList.remove(
+      "hidden"
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   Login Mode
+   ========================================================= */
+
+let loginMode = "email";
+
+
+document
+  .querySelectorAll(".tab")
+  .forEach(
+    (tab) => {
+
+      tab.addEventListener(
+        "click",
+        () => {
+
+          document
+            .querySelectorAll(".tab")
+            .forEach(
+              (item) => {
+
+                item.classList.remove(
+                  "active"
+                );
+
+              }
+            );
+
+
+          tab.classList.add(
+            "active"
+          );
+
+
+          loginMode =
+            tab.dataset.login;
+
+
+          [
+            "emailFields",
+            "madarsaFields",
+            "phoneFields"
+
+          ].forEach(
+            (id) => {
+
+              $(id)
+                .classList
+                .add("hidden");
+
+            }
+          );
+
+
+          const fields =
+            $(
+              `${loginMode}Fields`
+            );
+
+
+          if (fields) {
+
+            fields.classList.remove(
+              "hidden"
+            );
+
+          }
+
+
+          $("loginMsg")
+            .textContent = "";
+
+        }
+      );
+
+    }
+  );
+
+
+/* =========================================================
+   Login
+   ========================================================= */
+
+$("loginForm").addEventListener(
+  "submit",
+  (event) => {
+
+    event.preventDefault();
+
+
+    $("loginMsg")
+      .textContent = "";
+
+
+    /* -------------------------------------------------------
+       Email
+       ------------------------------------------------------- */
 
     if (
-        !elements.previewBox ||
-        !elements.receiptPreview ||
-        !fileOrData
+      loginMode === "email"
     ) {
 
+      const email =
+        $("email")
+          .value
+          .trim();
+
+
+      const password =
+        $("password")
+          .value
+          .trim();
+
+
+      if (!email) {
+
+        $("loginMsg")
+          .textContent =
+          "ای میل درج کریں";
+
         return;
+
+      }
+
+
+      if (!password) {
+
+        $("loginMsg")
+          .textContent =
+          "پاس ورڈ درج کریں";
+
+        return;
+
+      }
 
     }
 
 
-    // ------------------------------------------------
-    // اگر پہلے سے Data URL ہے
-    // ------------------------------------------------
+    /* -------------------------------------------------------
+       Madrasa ID
+       ------------------------------------------------------- */
 
     if (
-        typeof fileOrData ===
-        "string"
+      loginMode === "madarsa"
     ) {
 
-        elements.receiptPreview.src =
-            fileOrData;
+      const id =
+        $("madarsaId")
+          .value
+          .trim();
 
 
-        elements.previewBox.style.display =
-            "block";
+      const password =
+        $("madarsaPassword")
+          .value
+          .trim();
 
 
-        state.selectedImage =
-            fileOrData;
+      if (!id) {
 
+        $("loginMsg")
+          .textContent =
+          "مدرسہ ID درج کریں";
 
         return;
+
+      }
+
+
+      if (!password) {
+
+        $("loginMsg")
+          .textContent =
+          "پاس ورڈ درج کریں";
+
+        return;
+
+      }
+
+
+      currentMadarsa =
+        id;
 
     }
 
 
-    // ------------------------------------------------
-    // اگر File object ہے
-    // ------------------------------------------------
+    /* -------------------------------------------------------
+       Phone OTP
+       ------------------------------------------------------- */
+
+    if (
+      loginMode === "phone"
+    ) {
+
+      const phone =
+        $("phone")
+          .value
+          .trim();
+
+
+      const otp =
+        $("otp")
+          .value
+          .trim();
+
+
+      if (!phone) {
+
+        $("loginMsg")
+          .textContent =
+          "موبائل نمبر درج کریں";
+
+        return;
+
+      }
+
+
+      if (!otp) {
+
+        $("loginMsg")
+          .textContent =
+          "OTP درج کریں";
+
+        return;
+
+      }
+
+
+      if (
+        otp.length !== 6
+      ) {
+
+        $("loginMsg")
+          .textContent =
+          "OTP چھ ہندسوں کا ہونا چاہیے";
+
+        return;
+
+      }
+
+    }
+
+
+    /* Login کے بعد مدرسہ */
+
+    openSchoolScreen();
+
+  }
+);
+
+
+/* =========================================================
+   OTP
+   ========================================================= */
+
+$("sendOtp").addEventListener(
+  "click",
+  () => {
+
+    const phone =
+      $("phone")
+        .value
+        .trim();
+
+
+    if (!phone) {
+
+      $("loginMsg")
+        .textContent =
+        "پہلے موبائل نمبر درج کریں";
+
+      return;
+
+    }
+
+
+    $("otpWrap")
+      .classList
+      .remove("hidden");
+
+
+    $("loginMsg")
+      .textContent =
+      "OTP بھیج دیا گیا ہے۔ اصل Firebase OTP اگلے مرحلے میں لگے گا۔";
+
+  }
+);
+
+
+/* =========================================================
+   مدرسہ Screen
+   ========================================================= */
+
+function openSchoolScreen() {
+
+  $("schoolName")
+    .textContent =
+    currentMadarsa;
+
+
+  showScreen(
+    "schoolScreen"
+  );
+
+}
+
+
+/* =========================================================
+   مدرسہ کھولیں
+   ========================================================= */
+
+$("openMadarsa").addEventListener(
+  "click",
+  () => {
+
+    $("mainSchoolName")
+      .textContent =
+      currentMadarsa;
+
+
+    showScreen(
+      "mainScreen"
+    );
+
+  }
+);
+
+
+/* =========================================================
+   Main → Donation
+   ========================================================= */
+
+$("donationBtn").addEventListener(
+  "click",
+  () => {
+
+    $("donationSchoolName")
+      .textContent =
+      currentMadarsa;
+
+
+    render();
+
+
+    showScreen(
+      "donationScreen"
+    );
+
+  }
+);
+
+
+/* =========================================================
+   Main Back
+   ========================================================= */
+
+$("mainBack").addEventListener(
+  "click",
+  () => {
+
+    openSchoolScreen();
+
+  }
+);
+
+
+/* =========================================================
+   Donation Back
+   ========================================================= */
+
+$("donationBack").addEventListener(
+  "click",
+  () => {
+
+    showScreen(
+      "mainScreen"
+    );
+
+  }
+);
+
+
+/* =========================================================
+   Logout
+   ========================================================= */
+
+$("schoolLogout").addEventListener(
+  "click",
+  logout
+);
+
+
+function logout() {
+
+  currentMadarsa =
+    "دارالعلوم میوانوادہ";
+
+
+  $("loginForm")
+    .reset();
+
+
+  $("otpWrap")
+    .classList
+    .add("hidden");
+
+
+  $("loginMsg")
+    .textContent = "";
+
+
+  showScreen(
+    "loginScreen"
+  );
+
+}
+/* =========================================================
+   نئی رسید
+   ========================================================= */
+
+$("newReceipt").addEventListener(
+  "click",
+  () => {
+
+    $("receiptForm").reset();
+
+    $("rMadarsa").value =
+      currentMadarsa;
+
+    $("rDate").value =
+      new Date()
+        .toISOString()
+        .slice(0, 10);
+
+    $("photoPreview").style.display =
+      "none";
+
+    $("photoPreviewImg").src =
+      "";
+
+    $("ocrStatus").textContent =
+      "";
+
+    $("receiptDialog").showModal();
+
+  }
+);
+
+
+/* =========================================================
+   Dialog بند
+   ========================================================= */
+
+$("closeDialog").addEventListener(
+  "click",
+  () => {
+
+    $("receiptDialog").close();
+
+  }
+);
+
+
+/* =========================================================
+   Receipt Photo Preview
+   ========================================================= */
+
+$("receiptPhoto").addEventListener(
+  "change",
+  () => {
+
+    const file =
+      $("receiptPhoto").files[ 0 ];
+
+    if (!file) {
+
+      $("photoPreview").style.display =
+        "none";
+
+      $("photoPreviewImg").src =
+        "";
+
+      return;
+
+    }
+
 
     const reader =
-        new FileReader();
+      new FileReader();
 
 
     reader.onload =
-        function () {
+      (event) => {
 
-            elements.receiptPreview.src =
-                reader.result;
+        $("photoPreviewImg").src =
+          event.target.result;
 
+        $("photoPreview").style.display =
+          "block";
 
-            elements.previewBox.style.display =
-                "block";
-
-
-            state.selectedImage =
-                reader.result;
-
-        };
+      };
 
 
-    reader.onerror =
-        function (error) {
+    reader.readAsDataURL(file);
 
-            console.error(
-                "Image Read Error:",
-                error
-            );
-
-            setOCRStatus(
-                "❌ تصویر پڑھنے میں مسئلہ آیا۔"
-            );
-
-        };
+  }
+);
 
 
-    reader.readAsDataURL(
-        fileOrData
-    );
+/* =========================================================
+   نئی رسید Firebase + LocalStorage میں Save
+   ========================================================= */
 
-}
+$("receiptForm").addEventListener(
+  "submit",
+  async (event) => {
 
-
-// ========================================================
-// FIND DUPLICATE RECEIPT
-// ========================================================
-
-function findDuplicate(record) {
-
-    const receipt =
-        normalizeDigits(
-            record.receiptNumber
-        );
+    event.preventDefault();
 
 
-    if (!receipt) {
+    const volume =
+      Number(
+        $("rVolume").value
+      );
 
-        return null;
+
+    const page =
+      Number(
+        $("rPage").value
+      ) || 0;
+
+
+    const receiptNo =
+      Number(
+        $("rNo").value
+      );
+
+
+    const date =
+      $("rDate").value;
+
+
+    const name =
+      $("rName")
+        .value
+        .trim();
+
+
+    const mobile =
+      $("rMobile")
+        .value
+        .trim();
+
+
+    const amount =
+      Number(
+        $("rAmount").value
+      );
+
+
+    const type =
+      $("rType").value;
+
+
+    /* -------------------------------------------------------
+       Validation
+       ------------------------------------------------------- */
+
+    if (!volume) {
+
+      alert(
+        "جلد نمبر درج کریں"
+      );
+
+      return;
 
     }
 
 
-    return state.records.find(
-        function (item, index) {
+    if (!receiptNo) {
 
-            // موجودہ edit record کو ignore کریں
-            if (
-                index ===
-                state.editIndex
-            ) {
+      alert(
+        "رسید نمبر درج کریں"
+      );
 
-                return false;
+      return;
 
-            }
+    }
 
 
-            const itemReceipt =
-                normalizeDigits(
-                    item.receiptNumber ||
-                    item.receipt
-                );
+    if (!name) {
+
+      alert(
+        "نام درج کریں"
+      );
+
+      return;
+
+    }
 
 
-            if (
-                itemReceipt !==
-                receipt
-            ) {
+    if (!date) {
 
-                return false;
+      alert(
+        "تاریخ منتخب کریں"
+      );
 
-            }
+      return;
 
-
-            const a =
-                normalizeText(
-                    item.madarsa
-                ).toLowerCase();
+    }
 
 
-            const b =
-                normalizeText(
-                    record.madarsa
-                ).toLowerCase();
+    if (
+      !amount ||
+      amount <= 0
+    ) {
+
+      alert(
+        "صحیح رقم درج کریں"
+      );
+
+      return;
+
+    }
 
 
-            // اگر مدرسہ خالی ہو تو بھی
-            // receipt number کو duplicate سمجھیں
-            if (
-                !a ||
-                !b
-            ) {
+    /* -------------------------------------------------------
+       Duplicate Check
+       جلد + رسید نمبر
+       ------------------------------------------------------- */
 
-                return true;
+    const localDuplicate =
+      records.some(
+        (record) => {
 
-            }
+          return (
 
+            String(
+              record.madrasa || ""
+            ) ===
+            String(
+              currentMadarsa || ""
+            )
 
-            return a === b;
+            &&
+
+            Number(
+              record.volume || 0
+            ) ===
+            volume
+
+            &&
+
+            Number(
+              record.no || 0
+            ) ===
+            receiptNo
+
+          );
 
         }
-    ) || null;
-
-}
+      );
 
 
-// ========================================================
-// SHOW DUPLICATE WARNING
-// ========================================================
+    if (localDuplicate) {
 
-function showDuplicateWarning(record) {
+      alert(
+        `مدرسہ ${currentMadarsa} میں جلد نمبر ${volume} کی رسید نمبر ${receiptNo} پہلے سے موجود ہے۔`
+      );
 
-    if (
-        !elements.duplicateWarning
-    ) {
-
-        return;
+      return;
 
     }
 
 
-    elements.duplicateWarning.style.display =
-        "block";
+    /* -------------------------------------------------------
+       Firebase میں بھی Duplicate Check
+       ------------------------------------------------------- */
+
+    try {
+
+      const duplicateSnapshot =
+        await db
+          .collection(
+            FIREBASE_COLLECTION
+          )
+          .where(
+            "madrasa",
+            "==",
+            currentMadarsa
+          )
+          .where(
+            "volume",
+            "==",
+            volume
+          )
+          .where(
+            "no",
+            "==",
+            receiptNo
+          )
+          .limit(1)
+          .get();
 
 
-    elements.duplicateWarning.textContent =
+      if (
+        !duplicateSnapshot.empty
+      ) {
 
-        "⚠️ اس رسید نمبر کی رسید پہلے سے محفوظ ہے۔" +
-
-        (
-            record
-                ? " نام: " +
-                  (record.donorName || "") +
-                  "، رقم: " +
-                  formatAmount(
-                      record.amount
-                  )
-                : ""
+        alert(
+          `جلد نمبر ${volume} میں رسید نمبر ${receiptNo} Firebase میں پہلے سے موجود ہے۔`
         );
 
-}
-
-
-// ========================================================
-// HIDE DUPLICATE WARNING
-// ========================================================
-
-function hideDuplicateWarning() {
-
-    if (
-        !elements.duplicateWarning
-    ) {
-
         return;
+
+      }
+
+
+    }
+
+    catch (error) {
+
+      console.error(
+        "Firebase duplicate check error:",
+        error
+      );
+
+
+      alert(
+        "Firebase سے رابطہ نہیں ہو سکا۔ رسید محفوظ نہیں کی گئی۔"
+      );
+
+      return;
 
     }
 
 
-    elements.duplicateWarning.style.display =
+    /* -------------------------------------------------------
+       تصویر
+       ------------------------------------------------------- */
+
+    let photo = "";
+
+
+    const photoFile =
+      $("receiptPhoto")
+        .files[ 0 ];
+
+
+    if (photoFile) {
+
+      try {
+
+        photo =
+          await fileToDataURL(
+            photoFile
+          );
+
+      }
+
+      catch (error) {
+
+        console.error(
+          "Photo conversion error:",
+          error
+        );
+
+      }
+
+    }
+
+
+    /* -------------------------------------------------------
+       Record
+       ------------------------------------------------------- */
+
+    const record = {
+
+      madrasa:
+        currentMadarsa,
+
+      volume:
+        volume,
+
+      page:
+        page,
+
+      no:
+        receiptNo,
+
+      date:
+        date,
+
+      name:
+        name,
+
+      mobile:
+        mobile,
+
+      amount:
+        amount,
+
+      type:
+        type,
+
+      photo:
+        photo,
+
+      createdAt:
+        new Date()
+          .toISOString()
+
+    };
+
+
+    /* -------------------------------------------------------
+       Save Firebase
+       ------------------------------------------------------- */
+
+    try {
+
+      const docRef =
+        await db
+          .collection(
+            FIREBASE_COLLECTION
+          )
+          .add(
+            record
+          );
+
+
+      /* Firebase ID */
+
+      record.id =
+        docRef.id;
+
+
+      /* -----------------------------------------------------
+         Local records
+         ----------------------------------------------------- */
+
+      records.unshift(
+        record
+      );
+
+
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(records)
+      );
+
+
+      /* -----------------------------------------------------
+         Form Reset
+         ----------------------------------------------------- */
+
+      $("receiptDialog")
+        .close();
+
+
+      $("receiptForm")
+        .reset();
+
+
+      $("photoPreview")
+        .style
+        .display =
         "none";
 
 
-    elements.duplicateWarning.textContent =
+      $("photoPreviewImg")
+        .src =
         "";
 
-}
+
+      $("ocrStatus")
+        .textContent =
+        "";
 
 
-// ========================================================
-// CHECK FORM
-// ========================================================
+      /* -----------------------------------------------------
+         Screen Update
+         ----------------------------------------------------- */
 
-function validateRecord(record) {
+      render();
 
-    if (
-        !record.madarsa
-    ) {
 
-        alert(
-            "مدرسہ کا نام لکھیں۔"
-        );
+      alert(
+        "رسید کامیابی سے محفوظ ہو گئی۔"
+      );
 
-        return false;
+
+      console.log(
+        "Firebase میں رسید محفوظ:",
+        docRef.id
+      );
+
 
     }
 
+    catch (error) {
 
-    if (
-        !record.receiptNumber
-    ) {
-
-        alert(
-            "رسید نمبر لکھیں۔"
-        );
-
-        return false;
-
-    }
+      console.error(
+        "Firebase Save Error:",
+        error
+      );
 
 
-    if (
-        !record.donorName
-    ) {
-
-        alert(
-            "چندہ دینے والے کا نام لکھیں۔"
-        );
-
-        return false;
+      alert(
+        "رسید محفوظ نہیں ہو سکی۔ Firebase کا Error Console میں دیکھیں۔"
+      );
 
     }
 
-
-    if (
-        !Number.isFinite(
-            record.amount
-        ) ||
-        record.amount <= 0
-    ) {
-
-        alert(
-            "صحیح رقم لکھیں۔"
-        );
-
-        return false;
-
-    }
-
-
-    return true;
-
-}
-
-
-// ========================================================
-// SAVE RECORD
-// ========================================================
-
-function saveRecord() {
-
-    const record =
-        getFormData();
-
-
-    // ------------------------------------------------
-    // Validation
-    // ------------------------------------------------
-
-    if (
-        !validateRecord(
-            record
-        )
-    ) {
-
-        return;
-
-    }
-
-
-    // ------------------------------------------------
-    // Duplicate Check
-    // ------------------------------------------------
-
-    const duplicate =
-        findDuplicate(
-            record
-        );
-
-
-    if (duplicate) {
-
-        showDuplicateWarning(
-            duplicate
-        );
-
-
-        const continueSave =
-            confirm(
-                "یہ رسید نمبر پہلے سے موجود ہے۔\n\n" +
-                "کیا آپ پھر بھی یہ رسید محفوظ کرنا چاہتے ہیں؟"
-            );
-
-
-        if (!continueSave) {
-
-            return;
-
-        }
-
-    }
-
-
-    hideDuplicateWarning();
-
-
-    // ------------------------------------------------
-    // EDIT
-    // ------------------------------------------------
-
-    if (
-        state.editIndex >= 0 &&
-        state.records[
-            state.editIndex
-        ]
-    ) {
-
-        state.records[
-            state.editIndex
-        ] =
-            normalizeRecord(
-                record
-            );
-
-
-        setOCRStatus(
-            "✅ رسید میں تبدیلی محفوظ ہوگئی۔"
-        );
-
-    }
-
-
-    // ------------------------------------------------
-    // NEW RECORD
-    // ------------------------------------------------
-
-    else {
-
-        state.records.push(
-            normalizeRecord(
-                record
-            )
-        );
-
-
-        setOCRStatus(
-            "✅ رسید محفوظ ہوگئی۔"
-        );
-
-    }
-
-
-    // ------------------------------------------------
-    // STORAGE
-    // ------------------------------------------------
-
-    const saved =
-        saveRecordsToStorage();
-
-
-    if (!saved) {
-
-        return;
-
-    }
-
-
-    // ------------------------------------------------
-    // RENDER
-    // ------------------------------------------------
-
-    if (
-        typeof renderRecords ===
-        "function"
-    ) {
-
-        renderRecords();
-
-    }
-
-
-    // ------------------------------------------------
-    // CLEAR FORM
-    // ------------------------------------------------
-
-    clearForm();
-
-}
-
-
-// ========================================================
-// EXPORT PART 2 FUNCTIONS
-// ========================================================
-
-app.getFormData =
-    getFormData;
-
-
-app.fillForm =
-    fillForm;
-
-
-app.clearForm =
-    clearForm;
-
-
-app.showImagePreview =
-    showImagePreview;
-
-
-app.findDuplicate =
-    findDuplicate;
-
-
-app.saveRecord =
-    saveRecord;
-
-
-console.log(
-    "✅ SCRIPT حصہ 2 تیار ہے۔"
+  }
 );
-// ============================================================
-// SCRIPT.JS — حصہ 3 / 8
-// Image File + OCR + Text Extraction
-// ============================================================
 
 
-// ========================================================
-// SHOW OCR TEXT
-// ========================================================
+/* =========================================================
+   File → Data URL
+   ========================================================= */
 
-function showOCRText(text) {
+function fileToDataURL(file) {
 
-    const clean =
-        cleanString(text);
+  return new Promise(
+    (resolve, reject) => {
+
+      const reader =
+        new FileReader();
 
 
-    state.currentOCRText =
-        clean;
+      reader.onload =
+        () => {
+
+          resolve(
+            reader.result
+          );
+
+        };
 
 
-    if (
-        elements.ocrText
-    ) {
+      reader.onerror =
+        () => {
 
-        elements.ocrText.textContent =
-            clean ||
-            "ابھی کوئی متن نہیں۔";
+          reject(
+            reader.error
+          );
+
+        };
+
+
+      reader.readAsDataURL(
+        file
+      );
 
     }
+  );
 
 }
 
 
-// ========================================================
-// SET INPUT VALUE SAFELY
-// ========================================================
+/* =========================================================
+   LocalStorage Backup Save
+   ========================================================= */
 
-function setInputValue(
-    element,
-    value
+function saveRecords() {
+
+  try {
+
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(records)
+    );
+
+  }
+
+  catch (error) {
+
+    console.error(
+      "LocalStorage Save Error:",
+      error
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   Money Format
+   ========================================================= */
+
+function money(amount) {
+
+  return (
+    "₹" +
+    Number(
+      amount || 0
+    )
+      .toLocaleString(
+        "en-IN"
+      )
+  );
+
+}
+
+
+/* =========================================================
+   Search
+   ========================================================= */
+
+$("search").addEventListener(
+  "input",
+  render
+);
+
+
+/* =========================================================
+   Volume Filter
+   ========================================================= */
+
+$("volumeFilter").addEventListener(
+  "change",
+  render
+);
+/* =========================================================
+   Money + Search کے بعد باقی Donation System
+   ========================================================= */
+
+
+/* =========================================================
+   Main Donation Render
+   ========================================================= */
+
+function render() {
+
+  const search =
+    $("search")
+      .value
+      .trim()
+      .toLowerCase();
+
+
+  const selectedVolume =
+    $("volumeFilter").value;
+
+
+  /* -------------------------------------------------------
+     موجودہ مدرسے کا Data
+     ------------------------------------------------------- */
+
+  const madarsaRecords =
+    records.filter(
+      (record) =>
+        String(
+          record.madrasa || ""
+        ) ===
+        String(
+          currentMadarsa || ""
+        )
+    );
+
+
+  /* -------------------------------------------------------
+     Search + Volume Filter
+     ------------------------------------------------------- */
+
+  const filtered =
+    madarsaRecords.filter(
+      (record) => {
+
+        const receiptNumber =
+          String(
+            record.no || ""
+          )
+            .toLowerCase();
+
+
+        const recordName =
+          String(
+            record.name || ""
+          )
+            .toLowerCase();
+
+
+        const matchesSearch =
+          !search ||
+          receiptNumber.includes(
+            search
+          ) ||
+          recordName.includes(
+            search
+          );
+
+
+        const matchesVolume =
+          !selectedVolume ||
+          String(
+            record.volume || ""
+          ) ===
+          String(
+            selectedVolume
+          );
+
+
+        return (
+          matchesSearch &&
+          matchesVolume
+        );
+
+      }
+    );
+
+
+  /* -------------------------------------------------------
+     Total Donation
+     ------------------------------------------------------- */
+
+  const total =
+    madarsaRecords.reduce(
+      (sum, record) => {
+
+        return (
+          sum +
+          Number(
+            record.amount || 0
+          )
+        );
+
+      },
+      0
+    );
+
+
+  $("donationTotal")
+    .textContent =
+    money(total);
+
+
+  /* -------------------------------------------------------
+     Total Receipts
+     ------------------------------------------------------- */
+
+  $("totalReceipts")
+    .textContent =
+    madarsaRecords.length;
+
+
+  /* -------------------------------------------------------
+     Total Volumes
+     ------------------------------------------------------- */
+
+  const volumes =
+    [
+      ...new Set(
+
+        madarsaRecords.map(
+          (record) =>
+            Number(
+              record.volume || 0
+            )
+        )
+
+      )
+    ]
+      .filter(
+        (volume) =>
+          volume > 0
+      )
+      .sort(
+        (a, b) =>
+          a - b
+      );
+
+
+  $("totalVolumes")
+    .textContent =
+    volumes.length;
+
+
+  /* -------------------------------------------------------
+     Volume Filter
+     ------------------------------------------------------- */
+
+  updateVolumeFilter(
+    volumes,
+    selectedVolume
+  );
+
+
+  /* -------------------------------------------------------
+     Volume Register
+     ------------------------------------------------------- */
+
+  renderVolumes(
+    volumes
+  );
+
+
+  /* -------------------------------------------------------
+     Receipt List
+     ------------------------------------------------------- */
+
+  renderReceipts(
+    filtered
+  );
+
+}
+
+
+/* =========================================================
+   Volume Filter Options
+   ========================================================= */
+
+function updateVolumeFilter(
+  volumes,
+  selectedVolume
 ) {
 
-    if (
-        !element
-    ) {
+  const select =
+    $("volumeFilter");
 
-        return;
+
+  select.innerHTML =
+    `<option value="">
+      تمام جلدیں
+    </option>`;
+
+
+  volumes.forEach(
+    (volume) => {
+
+      const option =
+        document.createElement(
+          "option"
+        );
+
+
+      option.value =
+        String(
+          volume
+        );
+
+
+      option.textContent =
+        `جلد نمبر ${volume}`;
+
+
+      if (
+        String(volume) ===
+        String(selectedVolume)
+      ) {
+
+        option.selected =
+          true;
+
+      }
+
+
+      select.appendChild(
+        option
+      );
 
     }
-
-
-    const clean =
-        cleanString(value);
-
-
-    if (clean) {
-
-        element.value =
-            clean;
-
-    }
+  );
 
 }
 
 
-// ========================================================
-// EXTRACT MOBILE NUMBER
-// ========================================================
+/* =========================================================
+   جلد وار رجسٹر
+   ========================================================= */
 
-function detectMobile(text) {
+function renderVolumes(
+  volumes
+) {
 
-    const clean =
-        normalizeDigits(
-            text
-        );
-
-
-    const matches =
-        clean.match(
-            /(?:\+?91[\s-]?)?[6-9]\d{9}\b/g
-        );
+  const container =
+    $("volumeList");
 
 
-    if (
-        matches &&
-        matches.length
-    ) {
+  if (
+    !volumes.length
+  ) {
 
-        return matches[0]
-            .replace(
-                /\s+/g,
-                ""
-            )
-            .replace(
-                /^91/,
-                ""
-            );
+    container.innerHTML =
+      `
+      <p class="demo-note">
+        ابھی کوئی جلد موجود نہیں۔
+      </p>
+      `;
 
-    }
+    return;
+
+  }
 
 
-    // پاکستانی/عمومی 10 یا 11 digit fallback
-    const fallback =
-        clean.match(
-            /\b\d{10,11}\b/g
-        );
+  container.innerHTML =
+    "";
 
 
-    return fallback &&
-        fallback.length
-        ? fallback[0]
-        : "";
+  volumes.forEach(
+    (volume) => {
 
-}
-
-
-// ========================================================
-// EXTRACT DATE
-// ========================================================
-
-function detectDate(text) {
-
-    const clean =
-        normalizeDigits(
-            text
-        );
-
-
-    // YYYY-MM-DD
-    let match =
-        clean.match(
-            /\b(20\d{2})[-\/](\d{1,2})[-\/](\d{1,2})\b/
-        );
-
-
-    if (match) {
-
-        const year =
-            match[1];
-
-        const month =
-            String(
-                match[2]
-            ).padStart(
-                2,
-                "0"
-            );
-
-        const day =
-            String(
-                match[3]
-            ).padStart(
-                2,
-                "0"
-            );
-
-
-        return (
-            year +
-            "-" +
-            month +
-            "-" +
-            day
-        );
-
-    }
-
-
-    // DD-MM-YYYY / DD/MM/YYYY
-    match =
-        clean.match(
-            /\b(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})\b/
-        );
-
-
-    if (match) {
-
-        const day =
-            String(
-                match[1]
-            ).padStart(
-                2,
-                "0"
-            );
-
-        const month =
-            String(
-                match[2]
-            ).padStart(
-                2,
-                "0"
-            );
-
-        const year =
-            match[3];
-
-
-        return (
-            year +
-            "-" +
-            month +
-            "-" +
-            day
-        );
-
-    }
-
-
-    return "";
-
-}
-
-
-// ========================================================
-// EXTRACT RECEIPT NUMBER
-// ========================================================
-
-function detectReceiptNumber(text) {
-
-    const clean =
-        normalizeDigits(
-            text
-        );
-
-
-    const patterns = [
-
-        /(?:رسید|receipt|رقم نمبر|نمبر)[^\d]{0,20}(\d{1,8})/i,
-
-        /(?:no|number|#)[^\d]{0,10}(\d{1,8})/i,
-
-        /\b\d{2,8}\b/
-
-    ];
-
-
-    for (
-        const pattern
-        of patterns
-    ) {
-
-        const match =
-            clean.match(
-                pattern
-            );
-
-
-        if (
-            match
-        ) {
+      const volumeRecords =
+        records.filter(
+          (record) => {
 
             return (
-                match[1] ||
-                match[0]
+
+              String(
+                record.madrasa || ""
+              ) ===
+              String(
+                currentMadarsa || ""
+              )
+
+              &&
+
+              Number(
+                record.volume || 0
+              ) ===
+              Number(
+                volume
+              )
+
             );
+
+          }
+        );
+
+
+      const total =
+        volumeRecords.reduce(
+          (sum, record) => {
+
+            return (
+              sum +
+              Number(
+                record.amount || 0
+              )
+            );
+
+          },
+          0
+        );
+
+
+      const card =
+        document.createElement(
+          "div"
+        );
+
+
+      card.className =
+        "volume";
+
+
+      card.innerHTML =
+        `
+        <strong>
+          جلد نمبر ${escapeHTML(volume)}
+        </strong>
+
+        <small>
+          ${volumeRecords.length}
+          رسیدیں
+          ·
+          ${money(total)}
+        </small>
+
+        <span>
+          کھولیں →
+        </span>
+        `;
+
+
+      card.addEventListener(
+        "click",
+        () => {
+
+          $("volumeFilter")
+            .value =
+            String(
+              volume
+            );
+
+
+          render();
 
         }
+      );
+
+
+      container.appendChild(
+        card
+      );
 
     }
-
-
-    return "";
+  );
 
 }
 
 
-// ========================================================
-// EXTRACT AMOUNT
-// ========================================================
-
-function detectAmount(text) {
-
-    const clean =
-        normalizeDigits(
-            text
-        );
-
-
-    const patterns = [
-
-        /(?:رقم|مبلغ|amount|total|Rs\.?|₹)[^\d]{0,20}([\d,]+(?:\.\d+)?)/i,
-
-        /(?:روپے|rupees)[^\d]{0,20}([\d,]+(?:\.\d+)?)/i
-
-    ];
-
-
-    for (
-        const pattern
-        of patterns
-    ) {
-
-        const match =
-            clean.match(
-                pattern
-            );
-
-
-        if (
-            match
-        ) {
-
-            return Number(
-                match[1]
-                    .replace(
-                        /,/g,
-                        ""
-                    )
-            );
-
-        }
-
-    }
-
-
-    // آخری fallback:
-    // بڑے نمبروں میں سے رقم تلاش کرنے کی کوشش
-
-    const numbers =
-        clean.match(
-            /\b\d{2,8}(?:,\d{3})*(?:\.\d+)?\b/g
-        );
-
-
-    if (
-        numbers &&
-        numbers.length
-    ) {
-
-        const parsed =
-            numbers.map(
-                function (item) {
-
-                    return Number(
-                        item.replace(
-                            /,/g,
-                            ""
-                        )
-                    );
-
-                }
-            );
-
-
-        const valid =
-            parsed.filter(
-                function (num) {
-
-                    return (
-                        Number.isFinite(num) &&
-                        num > 0
-                    );
-
-                }
-            );
-
-
-        if (
-            valid.length
-        ) {
-
-            return Math.max(
-                ...valid
-            );
-
-        }
-
-    }
-
-
-    return 0;
-
-}
-
-
-// ========================================================
-// EXTRACT NAME
-// ========================================================
-
-function detectName(text) {
-
-    const lines =
-        normalizeText(
-            text
-        )
-        .split(
-            "\n"
-        )
-        .map(
-            function (line) {
-
-                return line.trim();
-
-            }
-        )
-        .filter(
-            function (line) {
-
-                return line.length >= 3;
-
-            }
-        );
-
-
-    const labels = [
-
-        "نام",
-
-        "اسم",
-
-        "نام چندہ دہندہ",
-
-        "donor",
-
-        "name"
-
-    ];
-
-
-    for (
-        const line
-        of lines
-    ) {
-
-        const lower =
-            line.toLowerCase();
-
-
-        for (
-            const label
-            of labels
-        ) {
-
-            const index =
-                lower.indexOf(
-                    label.toLowerCase()
-                );
-
-
-            if (
-                index !== -1
-            ) {
-
-                let value =
-                    line.slice(
-                        index +
-                        label.length
-                    );
-
-
-                value =
-                    value
-                        .replace(
-                            /^[\s:：\-–—]+/,
-                            ""
-                        )
-                        .trim();
-
-
-                if (
-                    value.length >= 2
-                ) {
-
-                    return value;
-
-                }
-
-            }
-
-        }
-
-    }
-
-
-    return "";
-
-}
-
-
-// ========================================================
-// EXTRACT MADARSA
-// ========================================================
-
-function detectMadarsa(text) {
-
-    const lines =
-        normalizeText(
-            text
-        )
-        .split(
-            "\n"
-        )
-        .map(
-            function (line) {
-
-                return line.trim();
-
-            }
-        )
-        .filter(
-            Boolean
-        );
-
-
-    for (
-        const line
-        of lines
-    ) {
-
-        const lower =
-            line.toLowerCase();
-
-
-        if (
-            lower.includes(
-                "مدرسہ"
-            ) ||
-            lower.includes(
-                "madrasa"
-            ) ||
-            lower.includes(
-                "madarsa"
-            ) ||
-            lower.includes(
-                "madrasah"
-            )
-        ) {
-
-            return line;
-
-        }
-
-    }
-
-
-    return "";
-
-}
-
-
-// ========================================================
-// EXTRACT JILD
-// ========================================================
-
-function detectJild(text) {
-
-    const clean =
-        normalizeDigits(
-            text
-        );
-
-
-    const match =
-        clean.match(
-            /(?:جلد|jild)[^\d]{0,15}(\d{1,4})/i
-        );
-
-
-    return match
-        ? match[1]
-        : "";
-
-}
-
-
-// ========================================================
-// EXTRACT SAFHA
-// ========================================================
-
-function detectSafha(text) {
-
-    const clean =
-        normalizeDigits(
-            text
-        );
-
-
-    const match =
-        clean.match(
-            /(?:صفحہ|صفحه|safha|page)[^\d]{0,15}(\d{1,6})/i
-        );
-
-
-    return match
-        ? match[1]
-        : "";
-
-}
-
-
-// ========================================================
-// APPLY OCR DATA TO FORM
-// ========================================================
-
-function applyOCRToForm(text) {
-
-    const clean =
-        normalizeText(
-            text
-        );
-
-
-    if (!clean) {
-
-        return;
-
-    }
-
-
-    // ------------------------------------------------
-    // MOBILE
-    // ------------------------------------------------
-
-    const mobile =
-        detectMobile(
-            clean
-        );
-
-
-    if (
-        mobile
-    ) {
-
-        setInputValue(
-            elements.mobile,
-            mobile
-        );
-
-    }
-
-
-    // ------------------------------------------------
-    // DATE
-    // ------------------------------------------------
-
-    const date =
-        detectDate(
-            clean
-        );
-
-
-    if (
-        date
-    ) {
-
-        setInputValue(
-            elements.date,
-            date
-        );
-
-    }
-
-
-    // ------------------------------------------------
-    // RECEIPT NUMBER
-    // ------------------------------------------------
-
-    const receiptNumber =
-        detectReceiptNumber(
-            clean
-        );
-
-
-    if (
-        receiptNumber
-    ) {
-
-        setInputValue(
-            elements.receiptNumber,
-            receiptNumber
-        );
-
-    }
-
-
-    // ------------------------------------------------
-    // AMOUNT
-    // ------------------------------------------------
-
-    const amount =
-        detectAmount(
-            clean
-        );
-
-
-    if (
-        amount > 0
-    ) {
-
-        setInputValue(
-            elements.amount,
-            amount
-        );
-
-    }
-
-
-    // ------------------------------------------------
-    // NAME
-    // ------------------------------------------------
-
-    const name =
-        detectName(
-            clean
-        );
-
-
-    if (
-        name
-    ) {
-
-        setInputValue(
-            elements.donorName,
-            name
-        );
-
-    }
-
-
-    // ------------------------------------------------
-    // MADARSA
-    // ------------------------------------------------
-
-    const madarsa =
-        detectMadarsa(
-            clean
-        );
-
-
-    if (
-        madarsa
-    ) {
-
-        setInputValue(
-            elements.madarsa,
-            madarsa
-        );
-
-    }
-
-
-    // ------------------------------------------------
-    // JILD
-    // ------------------------------------------------
-
-    const jild =
-        detectJild(
-            clean
-        );
-
-
-    if (
-        jild
-    ) {
-
-        setInputValue(
-            elements.jild,
-            jild
-        );
-
-    }
-
-
-    // ------------------------------------------------
-    // SAFHA
-    // ------------------------------------------------
-
-    const safha =
-        detectSafha(
-            clean
-        );
-
-
-    if (
-        safha
-    ) {
-
-        setInputValue(
-            elements.safha,
-            safha
-        );
-
-    }
-
-
-    // ------------------------------------------------
-    // DUPLICATE CHECK
-    // ------------------------------------------------
-
-    const current =
-        getFormData();
-
-
-    const duplicate =
-        findDuplicate(
-            current
-        );
-
-
-    if (
-        duplicate
-    ) {
-
-        showDuplicateWarning(
-            duplicate
-        );
-
-    } else {
-
-        hideDuplicateWarning();
-
-    }
-
-}
-
-
-// ========================================================
-// RUN OCR
-// ========================================================
-
-async function runOCR(file) {
-
-    if (
-        !file
-    ) {
-
-        setOCRStatus(
-            "⚠️ پہلے رسید کی تصویر منتخب کریں۔"
-        );
-
-        return;
-
-    }
-
-
-    if (
-        typeof Tesseract ===
-        "undefined"
-    ) {
-
-        setOCRStatus(
-            "❌ Tesseract OCR لوڈ نہیں ہوئی۔"
-        );
-
-        return;
-
-    }
-
-
-    if (
-        state.ocrRunning
-    ) {
-
-        return;
-
-    }
-
-
-    state.ocrRunning =
-        true;
-
-
-    if (
-        elements.scanBtn
-    ) {
-
-        elements.scanBtn.disabled =
-            true;
-
-        elements.scanBtn.textContent =
-            "⏳ رسید پڑھی جا رہی ہے...";
-
-    }
-
-
-    setOCRStatus(
-        "⏳ تصویر سے متن پڑھا جا رہا ہے، تھوڑا انتظار کریں..."
-    );
-
-
-    try {
-
-        const result =
-            await Tesseract.recognize(
-
-                file,
-
-                "eng+urd",
-
-                {
-
-                    logger:
-                        function (info) {
-
-                            if (
-                                info &&
-                                typeof info.progress ===
-                                "number"
-                            ) {
-
-                                const percent =
-                                    Math.round(
-                                        info.progress *
-                                        100
-                                    );
-
-
-                                setOCRStatus(
-                                    "⏳ OCR جاری ہے... " +
-                                    percent +
-                                    "%"
-                                );
-
-                            }
-
-                        }
-
-                }
-
-            );
-
-
-        const text =
-            result &&
-            result.data
-                ? result.data.text
-                : "";
-
-
-        showOCRText(
-            text
-        );
-
-
-        if (
-            text.trim()
-        ) {
-
-            applyOCRToForm(
-                text
-            );
-
-
-            setOCRStatus(
-                "✅ رسید اسکین ہوگئی۔ معلومات چیک کرکے محفوظ کریں۔"
-            );
-
-        } else {
-
-            setOCRStatus(
-                "⚠️ OCR کو تصویر میں کوئی واضح متن نہیں ملا۔"
-            );
-
-        }
-
-
-    } catch (error) {
-
-        console.error(
-            "OCR Error:",
-            error
-        );
-
-
-        setOCRStatus(
-            "❌ OCR میں مسئلہ آیا: " +
-            (
-                error.message ||
-                "Unknown error"
-            )
-        );
-
-
-    } finally {
-
-        state.ocrRunning =
-            false;
-
-
-        if (
-            elements.scanBtn
-        ) {
-
-            elements.scanBtn.disabled =
-                false;
-
-            elements.scanBtn.textContent =
-                "📷 رسید اسکین کریں";
-
-        }
-
-    }
-
-}
-
-
-// ========================================================
-// IMAGE FILE CHANGE
-// ========================================================
-
-function handleImageChange(event) {
-
-    const file =
-        event &&
-        event.target
-            ? event.target.files[0]
-            : null;
-
-
-    if (!file) {
-
-        return;
-
-    }
-
-
-    if (
-        !file.type.startsWith(
-            "image/"
-        )
-    ) {
-
-        setOCRStatus(
-            "❌ براہ کرم تصویر منتخب کریں۔"
-        );
-
-        return;
-
-    }
-
-
-    showImagePreview(
-        file
-    );
-
-
-    setOCRStatus(
-        "📷 تصویر منتخب ہوگئی۔ اب رسید اسکین کریں۔"
-    );
-
-}
-
-
-// ========================================================
-// OCR BUTTON CLICK
-// ========================================================
-
-function handleScanClick() {
-
-    if (
-        !elements.receiptPhoto
-    ) {
-
-        return;
-
-    }
-
-
-    const file =
-        elements.receiptPhoto.files[0];
-
-
-    runOCR(
-        file
-    );
-
-}
-
-
-// ========================================================
-// EXPORT PART 3
-// ========================================================
-
-app.showOCRText =
-    showOCRText;
-
-
-app.detectMobile =
-    detectMobile;
-
-
-app.detectDate =
-    detectDate;
-
-
-app.detectReceiptNumber =
-    detectReceiptNumber;
-
-
-app.detectAmount =
-    detectAmount;
-
-
-app.detectName =
-    detectName;
-
-
-app.detectMadarsa =
-    detectMadarsa;
-
-
-app.detectJild =
-    detectJild;
-
-
-app.detectSafha =
-    detectSafha;
-
-
-app.applyOCRToForm =
-    applyOCRToForm;
-
-
-app.runOCR =
-    runOCR;
-
-
-app.handleImageChange =
-    handleImageChange;
-
-
-app.handleScanClick =
-    handleScanClick;
-
-
-console.log(
-    "✅ SCRIPT حصہ 3 تیار ہے۔"
-);
-// ============================================================
-// SCRIPT.JS — حصہ 4 / 8
-// Records Render + Search + Edit + Delete
-// ============================================================
-
-
-// ========================================================
-// GET VISIBLE RECORDS
-// ========================================================
-
-function getVisibleRecords() {
-
-    const query =
-        normalizeText(
-            state.searchText
-        ).toLowerCase();
-
-
-    if (!query) {
-
-        return [
-            ...state.records
-        ];
-
-    }
-
-
-    return state.records.filter(
-        function (record) {
-
-            const searchable = [
-
-                record.receiptNumber,
-
-                record.donorName,
-
-                record.mobile,
-
-                record.madarsa,
-
-                record.jild,
-
-                record.safha,
-
-                record.donationType,
-
-                record.address,
-
-                record.date,
-
-                record.amount
-
-            ]
-                .map(
-                    function (value) {
-
-                        return normalizeDigits(
-                            value
-                        ).toLowerCase();
-
-                    }
-                )
-                .join(" ");
-
-
-            return searchable.includes(
-                query
-            );
-
-        }
-    );
-
-}
-
-
-// ========================================================
-// CREATE RECORD HTML
-// ========================================================
-
-function createRecordHTML(
-    record,
-    index
+/* =========================================================
+   Receipt List
+   ========================================================= */
+
+function renderReceipts(
+  list
 ) {
 
-    const photoHTML =
-        record.photo
-
-            ? `
-                <div style="margin-top:12px;text-align:center;">
-                    <img
-                        src="${escapeHTML(record.photo)}"
-                        alt="رسید کی تصویر"
-                        style="
-                            width:100%;
-                            max-height:260px;
-                            object-fit:contain;
-                            border-radius:10px;
-                            border:1px solid #ddd;
-                        "
-                    >
-                </div>
-              `
-
-            : "";
+  const container =
+    $("receiptList");
 
 
-    return `
+  if (
+    !list.length
+  ) {
 
-        <div class="record">
+    container.innerHTML =
+      `
+      <p class="demo-note">
+        کوئی رسید نہیں ملی۔
+      </p>
+      `;
 
-            <strong>
-                رسید نمبر:
-                ${escapeHTML(
-                    record.receiptNumber
-                )}
-            </strong>
+    return;
 
-            <div style="margin-top:8px;line-height:1.9;">
-
-                <div>
-                    <b>نام:</b>
-                    ${escapeHTML(
-                        record.donorName
-                    )}
-                </div>
-
-                <div>
-                    <b>مدرسہ:</b>
-                    ${escapeHTML(
-                        record.madarsa
-                    )}
-                </div>
-
-                <div>
-                    <b>رقم:</b>
-                    ${escapeHTML(
-                        formatAmount(
-                            record.amount
-                        )
-                    )}
-                </div>
-
-                <div>
-                    <b>تاریخ:</b>
-                    ${escapeHTML(
-                        record.date
-                    )}
-                </div>
-
-                ${
-                    record.mobile
-                        ? `
-                            <div>
-                                <b>موبائل:</b>
-                                ${escapeHTML(
-                                    record.mobile
-                                )}
-                            </div>
-                          `
-                        : ""
-                }
-
-                ${
-                    record.jild
-                        ? `
-                            <div>
-                                <b>جلد:</b>
-                                ${escapeHTML(
-                                    record.jild
-                                )}
-                            </div>
-                          `
-                        : ""
-                }
-
-                ${
-                    record.safha
-                        ? `
-                            <div>
-                                <b>صفحہ:</b>
-                                ${escapeHTML(
-                                    record.safha
-                                )}
-                            </div>
-                          `
-                        : ""
-                }
-
-                ${
-                    record.donationType
-                        ? `
-                            <div>
-                                <b>چندہ کی مد:</b>
-                                ${escapeHTML(
-                                    record.donationType
-                                )}
-                            </div>
-                          `
-                        : ""
-                }
-
-                ${
-                    record.address
-                        ? `
-                            <div>
-                                <b>پتہ:</b>
-                                ${escapeHTML(
-                                    record.address
-                                )}
-                            </div>
-                          `
-                        : ""
-                }
-
-            </div>
-
-            ${photoHTML}
+  }
 
 
-            <div
-                style="
-                    display:grid;
-                    grid-template-columns:1fr 1fr;
-                    gap:8px;
-                    margin-top:12px;
-                "
-            >
-
-                <button
-                    type="button"
-                    class="edit-record-btn"
-                    data-index="${index}"
-                    style="
-                        background:#1677ff;
-                        color:white;
-                    "
-                >
-                    ✏️ ترمیم
-                </button>
+  container.innerHTML =
+    "";
 
 
-                <button
-                    type="button"
-                    class="delete-record-btn"
-                    data-index="${index}"
-                    style="
-                        background:#d93025;
-                        color:white;
-                    "
-                >
-                    🗑️ حذف
-                </button>
+  list.forEach(
+    (record) => {
 
-            </div>
+      const item =
+        document.createElement(
+          "div"
+        );
+
+
+      item.className =
+        "receipt";
+
+
+      item.innerHTML =
+        `
+
+        <div class="no">
+
+          #${escapeHTML(
+          record.no
+        )}
+
+          <small>
+            جلد
+            ${escapeHTML(
+          record.volume
+        )}
+          </small>
 
         </div>
 
-    `;
 
-}
+        <div class="receipt-info">
 
+          <b>
+            ${escapeHTML(
+          record.name
+        )}
+          </b>
 
-// ========================================================
-// RENDER RECORDS
-// ========================================================
+          <small>
+            ${escapeHTML(
+          record.date || ""
+        )}
 
-function renderRecords() {
+            ·
 
-    if (
-        !elements.recordsList
-    ) {
+            ${escapeHTML(
+          record.type ||
+          "عام چندہ"
+        )}
+          </small>
 
-        console.warn(
-            "recordsList element نہیں ملا۔"
-        );
-
-        return;
-
-    }
-
-
-    const records =
-        getVisibleRecords();
+        </div>
 
 
-    if (
-        !records.length
-    ) {
+        <div class="amount">
 
-        elements.recordsList.innerHTML = `
+          ${money(
+          record.amount
+        )}
 
-            <div class="empty">
-
-                ${
-                    state.searchText
-                        ? "🔍 تلاش کے مطابق کوئی رسید نہیں ملی۔"
-                        : "ابھی کوئی رسید محفوظ نہیں۔"
-                }
-
-            </div>
+        </div>
 
         `;
 
-        return;
 
-    }
+      /* -----------------------------------------------------
+         Receipt Click
+         ----------------------------------------------------- */
 
+      item.addEventListener(
+        "click",
+        () => {
 
-    elements.recordsList.innerHTML =
-        records
-            .map(
-                function (record) {
-
-                    const realIndex =
-                        state.records.indexOf(
-                            record
-                        );
-
-
-                    return createRecordHTML(
-                        record,
-                        realIndex
-                    );
-
-                }
-            )
-            .join("");
-
-
-    bindRecordButtons();
-
-}
-
-
-// ========================================================
-// BIND EDIT / DELETE BUTTONS
-// ========================================================
-
-function bindRecordButtons() {
-
-    const editButtons =
-        elements.recordsList.querySelectorAll(
-            ".edit-record-btn"
-        );
-
-
-    editButtons.forEach(
-        function (button) {
-
-            button.addEventListener(
-                "click",
-                function () {
-
-                    const index =
-                        Number(
-                            button.dataset.index
-                        );
-
-
-                    editRecord(
-                        index
-                    );
-
-                }
-            );
+          showReceiptDetails(
+            record
+          );
 
         }
-    );
+      );
 
 
-    const deleteButtons =
-        elements.recordsList.querySelectorAll(
-            ".delete-record-btn"
-        );
+      container.appendChild(
+        item
+      );
 
-
-    deleteButtons.forEach(
-        function (button) {
-
-            button.addEventListener(
-                "click",
-                function () {
-
-                    const index =
-                        Number(
-                            button.dataset.index
-                        );
-
-
-                    deleteRecord(
-                        index
-                    );
-
-                }
-            );
-
-        }
-    );
+    }
+  );
 
 }
 
 
-// ========================================================
-// EDIT RECORD
-// ========================================================
-
-function editRecord(index) {
-
-    if (
-        index < 0 ||
-        index >= state.records.length
-    ) {
-
-        return;
-
-    }
-
-
-    const record =
-        state.records[index];
-
-
-    state.editIndex =
-        index;
-
-
-    fillForm(
-        record
-    );
-
-
-    if (
-        elements.saveBtn
-    ) {
-
-        elements.saveBtn.textContent =
-            "💾 تبدیلی محفوظ کریں";
-
-    }
-
-
-    setOCRStatus(
-        "✏️ رسید ترمیم کے لیے کھولی گئی۔"
-    );
-
-
-    // صفحہ اوپر لے جائیں
-    window.scrollTo({
-
-        top: 0,
-
-        behavior: "smooth"
-
-    });
-
-}
-
-
-// ========================================================
-// DELETE RECORD
-// ========================================================
-
-function deleteRecord(index) {
-
-    if (
-        index < 0 ||
-        index >= state.records.length
-    ) {
-
-        return;
-
-    }
-
-
-    const record =
-        state.records[index];
-
-
-    const confirmed =
-        confirm(
-
-            "کیا آپ یہ رسید حذف کرنا چاہتے ہیں؟\n\n" +
-
-            "رسید نمبر: " +
-            (
-                record.receiptNumber ||
-                ""
-            ) +
-
-            "\nنام: " +
-            (
-                record.donorName ||
-                ""
-            )
-
-        );
-
-
-    if (!confirmed) {
-
-        return;
-
-    }
-
-
-    state.records.splice(
-        index,
-        1
-    );
-
-
-    saveRecordsToStorage();
-
-
-    renderRecords();
-
-
-    setOCRStatus(
-        "🗑️ رسید حذف ہوگئی۔"
-    );
-
-
-    if (
-        state.editIndex ===
-        index
-    ) {
-
-        clearForm();
-
-    }
-
-}
-
-
-// ========================================================
-// SEARCH RECORDS
-// ========================================================
-
-function searchRecords(value) {
-
-    state.searchText =
-        normalizeDigits(
-            value
-        ).toLowerCase();
-
-
-    renderRecords();
-
-}
-
-
-// ========================================================
-// EXPORT PART 4
-// ========================================================
-
-app.getVisibleRecords =
-    getVisibleRecords;
-
-
-app.renderRecords =
-    renderRecords;
-
-
-app.editRecord =
-    editRecord;
-
-
-app.deleteRecord =
-    deleteRecord;
-
-
-app.searchRecords =
-    searchRecords;
-
-
-console.log(
-    "✅ SCRIPT حصہ 4 تیار ہے۔"
-);
-// ============================================================
-// SCRIPT.JS — حصہ 5 / 8
-// Backup + Restore + Print
-// ============================================================
-
-
-// ========================================================
-// CREATE BACKUP DATA
-// ========================================================
-
-function createBackupData() {
-
-    return {
-
-        app:
-            "رسید محفوظ نظام",
-
-        version:
-            "1.0",
-
-        createdAt:
-            new Date().toISOString(),
-
-        records:
-            state.records
-
-    };
-
-}
-
-
-// ========================================================
-// DOWNLOAD TEXT FILE
-// ========================================================
-
-function downloadTextFile(
-    content,
-    filename,
-    mimeType
+/* =========================================================
+   Receipt Details
+   ========================================================= */
+
+function showReceiptDetails(
+  record
 ) {
 
-    try {
-
-        const blob =
-            new Blob(
-                [content],
-                {
-                    type:
-                        mimeType ||
-                        "text/plain;charset=utf-8"
-                }
-            );
+  const photo =
+    record.photo || "";
 
 
-        const url =
-            URL.createObjectURL(
-                blob
-            );
+  let message =
+    "رسید نمبر: " +
+    record.no;
 
 
-        const link =
-            document.createElement(
-                "a"
-            );
+  message +=
+    "\nنام: " +
+    (
+      record.name ||
+      ""
+    );
 
 
-        link.href =
-            url;
+  message +=
+    "\nرقم: " +
+    money(
+      record.amount
+    );
 
 
-        link.download =
-            filename;
+  message +=
+    "\nتاریخ: " +
+    (
+      record.date ||
+      ""
+    );
 
 
-        document.body.appendChild(
-            link
-        );
+  message +=
+    "\nجلد نمبر: " +
+    (
+      record.volume ||
+      ""
+    );
 
 
-        link.click();
+  message +=
+    "\nصفحہ نمبر: " +
+    (
+      record.page ||
+      ""
+    );
 
 
-        link.remove();
+  message +=
+    "\nقسم: " +
+    (
+      record.type ||
+      ""
+    );
 
 
-        setTimeout(
-            function () {
+  if (
+    record.mobile
+  ) {
 
-                URL.revokeObjectURL(
-                    url
-                );
+    message +=
+      "\nموبائل: " +
+      record.mobile;
 
-            },
-            1000
-        );
-
-
-        return true;
-
-    } catch (error) {
-
-        console.error(
-            "Download Error:",
-            error
-        );
+  }
 
 
-        return false;
+  if (
+    photo
+  ) {
 
-    }
-
-}
-
-
-// ========================================================
-// BACKUP DATA
-// ========================================================
-
-function backupData() {
-
-    try {
-
-        const backup =
-            createBackupData();
+    const viewer =
+      document.createElement(
+        "div"
+      );
 
 
-        const json =
-            JSON.stringify(
-                backup,
-                null,
-                2
-            );
+    viewer.style.cssText =
+      `
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.75);
+      z-index:9999;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+      `;
 
 
-        const date =
-            new Date()
-                .toISOString()
-                .slice(
-                    0,
-                    10
-                );
+    viewer.innerHTML =
+      `
+
+      <div
+        style="
+          background:white;
+          border-radius:18px;
+          padding:18px;
+          width:min(95%,500px);
+          max-height:90vh;
+          overflow:auto;
+        "
+      >
+
+        <h2>
+          رسید نمبر
+          ${escapeHTML(
+        record.no
+      )}
+        </h2>
+
+        <p>
+          <b>نام:</b>
+          ${escapeHTML(
+        record.name
+      )}
+        </p>
+
+        <p>
+          <b>رقم:</b>
+          ${money(
+        record.amount
+      )}
+        </p>
+
+        <img
+          src="${photo}"
+          alt="رسید"
+          style="
+            width:100%;
+            max-height:60vh;
+            object-fit:contain;
+            border-radius:12px;
+            margin-top:10px;
+          "
+        >
+
+        <button
+          id="closeReceiptViewer"
+          class="primary wide"
+          style="margin-top:15px"
+        >
+          بند کریں
+        </button>
+
+      </div>
+
+      `;
 
 
-        const filename =
-            "receipt-backup-" +
-            date +
-            ".json";
+    document.body.appendChild(
+      viewer
+    );
 
 
-        const success =
-            downloadTextFile(
-                json,
-                filename,
-                "application/json;charset=utf-8"
-            );
+    viewer
+      .querySelector(
+        "#closeReceiptViewer"
+      )
+      .addEventListener(
+        "click",
+        () => {
 
-
-        if (success) {
-
-            setOCRStatus(
-                "✅ بیک اپ فائل تیار ہوگئی۔"
-            );
-
-        } else {
-
-            setOCRStatus(
-                "❌ بیک اپ بنانے میں مسئلہ آیا۔"
-            );
+          viewer.remove();
 
         }
+      );
 
 
-    } catch (error) {
+  } else {
 
-        console.error(
-            "Backup Error:",
-            error
-        );
+    alert(
+      message
+    );
 
-
-        setOCRStatus(
-            "❌ بیک اپ بنانے میں مسئلہ آیا۔"
-        );
-
-    }
+  }
 
 }
 
 
-// ========================================================
-// RESTORE BACKUP OBJECT
-// ========================================================
+/* =========================================================
+   Security
+   ========================================================= */
 
-function restoreBackupObject(
-    data
+function escapeHTML(
+  value
 ) {
 
-    let incomingRecords = [];
+  return String(
+    value ?? ""
+  )
+    .replace(
+      /[&<>"']/g,
+      (character) => {
+
+        const entities = {
+
+          "&":
+            "&amp;",
+
+          "<":
+            "&lt;",
+
+          ">":
+            "&gt;",
+
+          '"':
+            "&quot;",
+
+          "'":
+            "&#039;"
+
+        };
 
 
-    // ------------------------------------------------
-    // اگر مکمل backup object ہے
-    // ------------------------------------------------
+        return (
+          entities[
+          character
+          ] ||
+          character
+        );
 
-    if (
-        data &&
-        Array.isArray(
-            data.records
+      }
+    );
+
+}
+/* =========================================================
+   آغاز
+   ========================================================= */
+
+/*
+   Firebase سے Data آنے کے بعد render خود ہو جائے گا۔
+   پہلے خالی/Local Data دکھا دیں۔
+*/
+
+try {
+  render();
+} catch (error) {
+  console.error(
+    "Initial render error:",
+    error
+  );
+}
+
+
+/* =========================================================
+   Firebase سے پرانی رسیدیں Load
+   ========================================================= */
+
+async function loadFirebaseRecords() {
+
+  try {
+
+    console.log(
+      "Firebase سے رسیدیں لوڈ ہو رہی ہیں..."
+    );
+
+
+    const snapshot =
+      await db
+        .collection(
+          FIREBASE_COLLECTION
         )
-    ) {
-
-        incomingRecords =
-            data.records;
-
-    }
+        .get();
 
 
-    // ------------------------------------------------
-    // اگر سیدھا array ہے
-    // ------------------------------------------------
-
-    else if (
-        Array.isArray(
-            data
-        )
-    ) {
-
-        incomingRecords =
-            data;
-
-    }
+    const firebaseRecords = [];
 
 
-    if (
-        !incomingRecords.length
-    ) {
-
-        alert(
-            "اس بیک اپ میں کوئی رسید نہیں ملی۔"
-        );
-
-        return false;
-
-    }
-
-
-    const confirmed =
-        confirm(
-
-            "بیک اپ میں " +
-            incomingRecords.length +
-            " رسیدیں ملی ہیں۔\n\n" +
-
-            "کیا موجودہ رسیدوں کو حذف کرکے " +
-            "یہ بیک اپ بحال کرنا ہے؟"
-
-        );
-
-
-    if (!confirmed) {
-
-        return false;
-
-    }
-
-
-    state.records =
-        incomingRecords.map(
-            normalizeRecord
-        );
-
-
-    const saved =
-        saveRecordsToStorage();
-
-
-    if (!saved) {
-
-        return false;
-
-    }
-
-
-    state.editIndex =
-        -1;
-
-
-    renderRecords();
-
-
-    clearForm();
-
-
-    setOCRStatus(
-        "✅ بیک اپ کامیابی سے بحال ہوگیا۔"
-    );
-
-
-    return true;
-
-}
-
-
-// ========================================================
-// RESTORE FILE
-// ========================================================
-
-async function restoreFile(
-    file
-) {
-
-    if (!file) {
-
-        return false;
-
-    }
-
-
-    try {
-
-        const text =
-            await file.text();
-
+    snapshot.forEach(
+      (doc) => {
 
         const data =
-            JSON.parse(
-                text
-            );
+          doc.data();
 
 
-        return restoreBackupObject(
-            data
-        );
+        firebaseRecords.push({
 
-    } catch (error) {
+          id:
+            doc.id,
 
-        console.error(
-            "Restore Error:",
-            error
-        );
+          madrasa:
+            data.madrasa ||
+            data.madarsa ||
+            "دارالعلوم میوانوادہ",
 
-
-        alert(
-            "❌ بیک اپ فائل درست JSON فائل نہیں ہے۔"
-        );
-
-
-        return false;
-
-    }
-
-}
-
-
-// ========================================================
-// PRINT RECEIPT
-// ========================================================
-
-function printReceipt(
-    index
-) {
-
-    if (
-        index < 0 ||
-        index >= state.records.length
-    ) {
-
-        return;
-
-    }
-
-
-    const record =
-        state.records[index];
-
-
-    const printWindow =
-        window.open(
-            "",
-            "_blank"
-        );
-
-
-    if (!printWindow) {
-
-        alert(
-            "پرنٹ ونڈو نہیں کھل سکی۔ براہ کرم browser میں popup اجازت دیں۔"
-        );
-
-        return;
-
-    }
-
-
-    const html = `
-
-<!DOCTYPE html>
-
-<html
-    lang="ur"
-    dir="rtl"
->
-
-<head>
-
-    <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
-    <title>
-        رسید نمبر ${escapeHTML(
-            record.receiptNumber
-        )}
-    </title>
-
-
-    <style>
-
-        body {
-
-            font-family:
-                Arial,
-                "Noto Nastaliq Urdu",
-                sans-serif;
-
-            margin: 0;
-
-            padding: 30px;
-
-            color: #222;
-
-        }
-
-
-        .receipt {
-
-            max-width: 700px;
-
-            margin: auto;
-
-            border: 2px solid #222;
-
-            border-radius: 12px;
-
-            padding: 25px;
-
-        }
-
-
-        h1 {
-
-            text-align: center;
-
-            margin-top: 0;
-
-        }
-
-
-        .line {
-
-            display: flex;
-
-            justify-content:
-                space-between;
-
-            gap: 20px;
-
-            border-bottom:
-                1px solid #ddd;
-
-            padding: 10px 0;
-
-        }
-
-
-        .label {
-
-            font-weight: bold;
-
-        }
-
-
-        .photo {
-
-            text-align: center;
-
-            margin-top: 20px;
-
-        }
-
-
-        .photo img {
-
-            max-width: 100%;
-
-            max-height: 400px;
-
-        }
-
-
-        @media print {
-
-            body {
-
-                padding: 0;
-
-            }
-
-
-            .receipt {
-
-                border:
-                    1px solid #222;
-
-            }
-
-        }
-
-    </style>
-
-</head>
-
-
-<body>
-
-
-<div class="receipt">
-
-    <h1>
-        رسید محفوظ نظام
-    </h1>
-
-
-    <div class="line">
-
-        <span class="label">
-            مدرسہ
-        </span>
-
-        <span>
-            ${escapeHTML(
-                record.madarsa
-            )}
-        </span>
-
-    </div>
-
-
-    <div class="line">
-
-        <span class="label">
-            رسید نمبر
-        </span>
-
-        <span>
-            ${escapeHTML(
-                record.receiptNumber
-            )}
-        </span>
-
-    </div>
-
-
-    <div class="line">
-
-        <span class="label">
-            نام
-        </span>
-
-        <span>
-            ${escapeHTML(
-                record.donorName
-            )}
-        </span>
-
-    </div>
-
-
-    <div class="line">
-
-        <span class="label">
-            رقم
-        </span>
-
-        <span>
-            ${escapeHTML(
-                formatAmount(
-                    record.amount
-                )
-            )}
-        </span>
-
-    </div>
-
-
-    <div class="line">
-
-        <span class="label">
-            تاریخ
-        </span>
-
-        <span>
-            ${escapeHTML(
-                record.date
-            )}
-        </span>
-
-    </div>
-
-
-    <div class="line">
-
-        <span class="label">
-            موبائل
-        </span>
-
-        <span>
-            ${escapeHTML(
-                record.mobile
-            )}
-        </span>
-
-    </div>
-
-
-    <div class="line">
-
-        <span class="label">
-            جلد نمبر
-        </span>
-
-        <span>
-            ${escapeHTML(
-                record.jild
-            )}
-        </span>
-
-    </div>
-
-
-    <div class="line">
-
-        <span class="label">
-            صفحہ نمبر
-        </span>
-
-        <span>
-            ${escapeHTML(
-                record.safha
-            )}
-        </span>
-
-    </div>
-
-
-    <div class="line">
-
-        <span class="label">
-            چندہ کی مد
-        </span>
-
-        <span>
-            ${escapeHTML(
-                record.donationType
-            )}
-        </span>
-
-    </div>
-
-
-    <div class="line">
-
-        <span class="label">
-            پتہ
-        </span>
-
-        <span>
-            ${escapeHTML(
-                record.address
-            )}
-        </span>
-
-    </div>
-
-
-    ${
-        record.photo
-            ? `
-                <div class="photo">
-
-                    <img
-                        src="${escapeHTML(
-                            record.photo
-                        )}"
-                        alt="رسید"
-                    >
-
-                </div>
-              `
-            : ""
-    }
-
-
-</div>
-
-
-<script>
-
-    window.onload = function () {
-
-        window.print();
-
-    };
-
-</script>
-
-
-</body>
-
-</html>
-
-`;
-
-
-    printWindow.document.open();
-
-    printWindow.document.write(
-        html
-    );
-
-    printWindow.document.close();
-
-
-}
-
-
-// ========================================================
-// EXPORT PART 5
-// ========================================================
-
-app.createBackupData =
-    createBackupData;
-
-
-app.backupData =
-    backupData;
-
-
-app.restoreBackupObject =
-    restoreBackupObject;
-
-
-app.restoreFile =
-    restoreFile;
-
-
-app.printReceipt =
-    printReceipt;
-
-
-console.log(
-    "✅ SCRIPT حصہ 5 تیار ہے۔"
-);
-// ============================================================
-// SCRIPT.JS — حصہ 6 / 8
-// Event Listeners + Application Initialization
-// ============================================================
-
-
-// ========================================================
-// ATTACH EVENT LISTENERS
-// ========================================================
-
-function attachEventListeners() {
-
-
-    // ------------------------------------------------
-    // IMAGE SELECT
-    // ------------------------------------------------
-
-    if (elements.receiptPhoto) {
-
-        elements.receiptPhoto.addEventListener(
-            "change",
-            handleImageChange
-        );
-
-    }
-
-
-    // ------------------------------------------------
-    // SCAN BUTTON
-    // ------------------------------------------------
-
-    if (elements.scanBtn) {
-
-        elements.scanBtn.addEventListener(
-            "click",
-            handleScanClick
-        );
-
-    }
-
-
-    // ------------------------------------------------
-    // SAVE BUTTON
-    // ------------------------------------------------
-
-    if (elements.saveBtn) {
-
-        elements.saveBtn.addEventListener(
-            "click",
-            function () {
-
-                saveRecord();
-
-            }
-        );
-
-    }
-
-
-    // ------------------------------------------------
-    // CLEAR BUTTON
-    // ------------------------------------------------
-
-    if (elements.clearBtn) {
-
-        elements.clearBtn.addEventListener(
-            "click",
-            function () {
-
-                clearForm();
-
-            }
-        );
-
-    }
-
-
-    // ------------------------------------------------
-    // SEARCH
-    // ------------------------------------------------
-
-    if (elements.searchBox) {
-
-        elements.searchBox.addEventListener(
-            "input",
-            function (event) {
-
-                searchRecords(
-                    event.target.value
-                );
-
-            }
-        );
-
-    }
-
-
-    // ------------------------------------------------
-    // RECEIPT NUMBER CHANGE
-    // ------------------------------------------------
-
-    if (elements.receiptNumber) {
-
-        elements.receiptNumber.addEventListener(
-            "input",
-            function () {
-
-                const record =
-                    getFormData();
-
-
-                const duplicate =
-                    findDuplicate(
-                        record
-                    );
-
-
-                if (duplicate) {
-
-                    showDuplicateWarning(
-                        duplicate
-                    );
-
-                } else {
-
-                    hideDuplicateWarning();
-
-                }
-
-            }
-        );
-
-    }
-
-
-    // ------------------------------------------------
-    // AMOUNT INPUT
-    // ------------------------------------------------
-
-    if (elements.amount) {
-
-        elements.amount.addEventListener(
-            "input",
-            function () {
-
-                const value =
-                    elements.amount.value;
-
-
-                if (
-                    value !== "" &&
-                    Number(value) < 0
-                ) {
-
-                    elements.amount.value =
-                        "0";
-
-                }
-
-            }
-        );
-
-    }
-
-}
-
-
-// ========================================================
-// INITIALIZE APPLICATION
-// ========================================================
-
-function initializeApp() {
-
-    console.log(
-        "رسید محفوظ نظام: initialization شروع..."
-    );
-
-
-    // ------------------------------------------------
-    // CACHE ELEMENTS
-    // ------------------------------------------------
-
-    cacheElements();
-
-
-    // ------------------------------------------------
-    // LOAD SAVED RECORDS
-    // ------------------------------------------------
-
-    loadRecordsFromStorage();
-
-
-    // ------------------------------------------------
-    // EVENT LISTENERS
-    // ------------------------------------------------
-
-    attachEventListeners();
-
-
-    // ------------------------------------------------
-    // INITIAL RECORD DISPLAY
-    // ------------------------------------------------
-
-    renderRecords();
-
-
-    // ------------------------------------------------
-    // INITIAL STATUS
-    // ------------------------------------------------
-
-    if (
-        elements.ocrStatus &&
-        !elements.ocrStatus.textContent.trim()
-    ) {
-
-        setOCRStatus(
-            "ابھی رسید اسکین نہیں ہوئی۔"
-        );
-
-    }
-
-
-    console.log(
-        "✅ رسید محفوظ نظام تیار ہے۔"
-    );
-
-
-    console.log(
-        "محفوظ رسیدوں کی تعداد:",
-        state.records.length
-    );
-
-}
-
-
-// ========================================================
-// DOM READY
-// ========================================================
-
-if (
-    document.readyState ===
-    "loading"
-) {
-
-    document.addEventListener(
-        "DOMContentLoaded",
-        initializeApp
-    );
-
-} else {
-
-    initializeApp();
-
-}
-
-
-// ========================================================
-// GLOBAL API
-// ========================================================
-
-window.ReceiptSystem =
-    window.ReceiptSystem || {};
-
-
-window.ReceiptSystem.state =
-    state;
-
-
-window.ReceiptSystem.elements =
-    elements;
-
-
-window.ReceiptSystem.app =
-    app;
-
-
-window.ReceiptSystem.initialize =
-    initializeApp;
-
-
-window.ReceiptSystem.renderRecords =
-    renderRecords;
-
-
-window.ReceiptSystem.saveRecord =
-    saveRecord;
-
-
-window.ReceiptSystem.deleteRecord =
-    deleteRecord;
-
-
-window.ReceiptSystem.editRecord =
-    editRecord;
-
-
-window.ReceiptSystem.clearForm =
-    clearForm;
-
-
-window.ReceiptSystem.runOCR =
-    runOCR;
-
-
-window.ReceiptSystem.backupData =
-    backupData;
-
-
-window.ReceiptSystem.restoreFile =
-    restoreFile;
-
-
-window.ReceiptSystem.printReceipt =
-    printReceipt;
-
-
-console.log(
-    "✅ SCRIPT حصہ 6 تیار ہے۔"
-);
-// ============================================================
-// SCRIPT.JS — حصہ 7 / 8
-// Utilities + Record Normalization + Formatting
-// ============================================================
-
-
-// ========================================================
-// CREATE UNIQUE RECORD ID
-// ========================================================
-
-function createRecordId() {
-
-    return (
-        Date.now().toString(36) +
-        "-" +
-        Math.random()
-            .toString(36)
-            .slice(2, 10)
-    );
-
-}
-
-
-// ========================================================
-// CLEAN STRING
-// ========================================================
-
-function cleanString(value) {
-
-    if (
-        value === null ||
-        value === undefined
-    ) {
-
-        return "";
-
-    }
-
-
-    return String(value)
-        .trim();
-
-}
-
-
-// ========================================================
-// NORMALIZE DIGITS
-// Urdu / Arabic digits → English digits
-// ========================================================
-
-function normalizeDigits(value) {
-
-    const text =
-        cleanString(
-            value
-        );
-
-
-    const map = {
-
-        "۰": "0",
-        "۱": "1",
-        "۲": "2",
-        "۳": "3",
-        "۴": "4",
-        "۵": "5",
-        "۶": "6",
-        "۷": "7",
-        "۸": "8",
-        "۹": "9",
-
-        "٠": "0",
-        "١": "1",
-        "٢": "2",
-        "٣": "3",
-        "٤": "4",
-        "٥": "5",
-        "٦": "6",
-        "٧": "7",
-        "٨": "8",
-        "٩": "9"
-
-    };
-
-
-    return text.replace(
-        /[۰-۹٠-٩]/g,
-        function (digit) {
-
-            return map[digit] ||
-                digit;
-
-        }
-    );
-
-}
-
-
-// ========================================================
-// NORMALIZE TEXT
-// ========================================================
-
-function normalizeText(value) {
-
-    return normalizeDigits(
-        cleanString(
-            value
-        )
-    )
-        .replace(
-            /\r/g,
-            ""
-        )
-        .replace(
-            /[ \t]+/g,
-            " "
-        )
-        .replace(
-            /\n{3,}/g,
-            "\n\n"
-        )
-        .trim();
-
-}
-
-
-// ========================================================
-// ESCAPE HTML
-// ========================================================
-
-function escapeHTML(value) {
-
-    const text =
-        cleanString(
-            value
-        );
-
-
-    return text
-        .replace(
-            /&/g,
-            "&amp;"
-        )
-        .replace(
-            /</g,
-            "&lt;"
-        )
-        .replace(
-            />/g,
-            "&gt;"
-        )
-        .replace(
-            /"/g,
-            "&quot;"
-        )
-        .replace(
-            /'/g,
-            "&#039;"
-        );
-
-}
-
-
-// ========================================================
-// FORMAT AMOUNT
-// ========================================================
-
-function formatAmount(value) {
-
-    const number =
-        Number(
-            value
-        );
-
-
-    if (
-        !Number.isFinite(
-            number
-        )
-    ) {
-
-        return "0";
-
-    }
-
-
-    return number.toLocaleString(
-        "en-IN"
-    );
-
-}
-
-
-// ========================================================
-// NORMALIZE RECORD
-// ========================================================
-
-function normalizeRecord(
-    record
-) {
-
-    const item =
-        record || {};
-
-
-    return {
-
-        id:
-            item.id ||
-            createRecordId(),
-
-
-        madarsa:
-            cleanString(
-                item.madarsa ||
-                item.madrasa ||
-                ""
-            ),
-
-
-        jild:
-            normalizeDigits(
-                item.jild ||
-                ""
-            ),
-
-
-        safha:
-            normalizeDigits(
-                item.safha ||
-                ""
-            ),
-
-
-        receiptNumber:
-            normalizeDigits(
-                item.receiptNumber ||
-                item.receipt ||
-                ""
-            ),
-
-
-        date:
-            cleanString(
-                item.date ||
-                ""
-            ),
-
-
-        donorName:
-            cleanString(
-                item.donorName ||
-                item.name ||
-                ""
-            ),
-
-
-        mobile:
-            normalizeDigits(
-                item.mobile ||
-                ""
-            ),
-
-
-        address:
-            cleanString(
-                item.address ||
-                ""
-            ),
-
-
-        donationType:
-            cleanString(
-                item.donationType ||
-                item.type ||
-                ""
-            ),
-
-
-        amount:
+          volume:
             Number(
-                item.amount ||
-                0
+              data.volume ??
+              data.jild ??
+              0
             ),
 
+          page:
+            Number(
+              data.page ??
+              data.safha ??
+              0
+            ),
 
-        photo:
-            item.photo ||
+          no:
+            Number(
+              data.no ??
+              data.receipt ??
+              0
+            ),
+
+          date:
+            data.date ||
+            "",
+
+          name:
+            data.name ||
+            "",
+
+          mobile:
+            data.mobile ||
+            "",
+
+          address:
+            data.address ||
+            "",
+
+          amount:
+            Number(
+              data.amount ||
+              0
+            ),
+
+          type:
+            data.type ||
+            "عام چندہ",
+
+          photo:
+            data.photo ||
+            data.image ||
+            "",
+
+          createdAt:
+            data.createdAt ||
             ""
 
-    };
+        });
 
-}
-
-
-// ========================================================
-// NORMALIZE ALL RECORDS
-// ========================================================
-
-function normalizeAllRecords() {
-
-    state.records =
-        Array.isArray(
-            state.records
-        )
-
-            ? state.records.map(
-                normalizeRecord
-            )
-
-            : [];
-
-}
-
-
-// ========================================================
-// GET TOTAL AMOUNT
-// ========================================================
-
-function getTotalAmount() {
-
-    return state.records.reduce(
-        function (
-            total,
-            record
-        ) {
-
-            const amount =
-                Number(
-                    record.amount
-                );
-
-
-            return total +
-                (
-                    Number.isFinite(
-                        amount
-                    )
-                        ? amount
-                        : 0
-                );
-
-        },
-        0
+      }
     );
 
-}
 
+    /* -------------------------------------------------------
+       Firebase Data کو موجودہ records کے ساتھ ملائیں
+       ------------------------------------------------------- */
 
-// ========================================================
-// GET RECORD COUNT
-// ========================================================
+    firebaseRecords.forEach(
+      (firebaseRecord) => {
 
-function getRecordCount() {
+        const exists =
+          records.some(
+            (record) => {
 
-    return Array.isArray(
-        state.records
-    )
-        ? state.records.length
-        : 0;
+              /* اگر Firebase ID موجود ہے */
 
-}
+              if (
+                record.id &&
+                record.id ===
+                firebaseRecord.id
+              ) {
 
+                return true;
 
-// ========================================================
-// SET OCR STATUS
-// ========================================================
+              }
 
-function setOCRStatus(
-    message
-) {
 
-    if (
-        !elements.ocrStatus
-    ) {
+              /* پرانے Data کے لیے
+                 مدرسہ + جلد + رسید نمبر */
 
-        return;
+              return (
 
-    }
+                String(
+                  record.madrasa ||
+                  ""
+                ) ===
+                String(
+                  firebaseRecord.madrasa ||
+                  ""
+                )
 
+                &&
 
-    elements.ocrStatus.textContent =
-        cleanString(
-            message
-        );
+                Number(
+                  record.volume ||
+                  0
+                ) ===
+                Number(
+                  firebaseRecord.volume ||
+                  0
+                )
 
-}
+                &&
 
+                Number(
+                  record.no ||
+                  0
+                ) ===
+                Number(
+                  firebaseRecord.no ||
+                  0
+                )
 
-// ========================================================
-// SAFE JSON PARSE
-// ========================================================
+              );
 
-function safeJSONParse(
-    value,
-    fallback
-) {
-
-    try {
-
-        return JSON.parse(
-            value
-        );
-
-    } catch (error) {
-
-        console.warn(
-            "JSON Parse Error:",
-            error
-        );
-
-
-        return fallback;
-
-    }
-
-}
-
-
-// ========================================================
-// EXPORT UTILITIES TO APP
-// ========================================================
-
-app.createRecordId =
-    createRecordId;
-
-
-app.cleanString =
-    cleanString;
-
-
-app.normalizeDigits =
-    normalizeDigits;
-
-
-app.normalizeText =
-    normalizeText;
-
-
-app.escapeHTML =
-    escapeHTML;
-
-
-app.formatAmount =
-    formatAmount;
-
-
-app.normalizeRecord =
-    normalizeRecord;
-
-
-app.normalizeAllRecords =
-    normalizeAllRecords;
-
-
-app.getTotalAmount =
-    getTotalAmount;
-
-
-app.getRecordCount =
-    getRecordCount;
-
-
-app.setOCRStatus =
-    setOCRStatus;
-
-
-app.safeJSONParse =
-    safeJSONParse;
-
-
-console.log(
-    "✅ SCRIPT حصہ 7 تیار ہے۔"
-);
-  // ============================================================
-// SCRIPT.JS — حصہ 8 / 8
-// Final Setup + Legacy Data + Global API + Close
-// ============================================================
-
-
-// ========================================================
-// LOAD LEGACY "receipts" DATA IF NEEDED
-// ========================================================
-
-function migrateOldReceiptsIfNeeded() {
-
-    try {
-
-        const current =
-            localStorage.getItem(
-                STORAGE_KEY
-            );
-
-
-        // اگر نیا storage پہلے ہی موجود ہے
-        // تو پرانے data کو نہ چھیڑیں
-        if (current) {
-
-            return;
-
-        }
-
-
-        const old =
-            localStorage.getItem(
-                "receipts"
-            );
-
-
-        if (!old) {
-
-            return;
-
-        }
-
-
-        const parsed =
-            JSON.parse(
-                old
-            );
+            }
+          );
 
 
         if (
-            Array.isArray(
-                parsed
-            )
+          !exists
         ) {
 
-            state.records =
-                parsed.map(
-                    normalizeRecord
-                );
-
-
-            saveRecordsToStorage();
-
-
-            console.log(
-                "✅ پرانا receipts data نئے storage میں منتقل ہوگیا۔"
-            );
+          records.push(
+            firebaseRecord
+          );
 
         }
 
-    } catch (error) {
+      }
+    );
 
-        console.error(
-            "Legacy Data Migration Error:",
-            error
-        );
+
+    /* -------------------------------------------------------
+       Local Backup
+       ------------------------------------------------------- */
+
+    saveRecords();
+
+
+    console.log(
+      "Firebase سے رسیدیں:",
+      firebaseRecords.length
+    );
+
+
+    /* -------------------------------------------------------
+       موجودہ Screen دوبارہ Render
+       ------------------------------------------------------- */
+
+    try {
+
+      render();
 
     }
 
-}
+    catch (renderError) {
+
+      console.error(
+        "Render error:",
+        renderError
+      );
+
+    }
 
 
-// ========================================================
-// FINAL APPLICATION SETUP
-// ========================================================
+  }
 
-function finalSetup() {
+  catch (error) {
 
-    console.log(
-        "رسید محفوظ نظام: Final Setup شروع..."
+    console.error(
+      "Firebase Load Error:",
+      error
     );
 
 
-    // ------------------------------------------------
-    // پرانا data دیکھیں
-    // ------------------------------------------------
+    /*
+       Firebase نہ چلے تو LocalStorage کا
+       Data پھر بھی کام کرتا رہے گا۔
+    */
 
-    migrateOldReceiptsIfNeeded();
+    try {
 
+      render();
 
-    // ------------------------------------------------
-    // موجودہ data دوبارہ load کریں
-    // ------------------------------------------------
+    }
 
-    loadRecordsFromStorage();
+    catch (renderError) {
 
+      console.error(
+        "Local render error:",
+        renderError
+      );
 
-    // ------------------------------------------------
-    // records کو standard format دیں
-    // ------------------------------------------------
+    }
 
-    normalizeAllRecords();
-
-
-    // ------------------------------------------------
-    // standard format storage میں محفوظ کریں
-    // ------------------------------------------------
-
-    saveRecordsToStorage();
-
-
-    // ------------------------------------------------
-    // records دوبارہ دکھائیں
-    // ------------------------------------------------
-
-    renderRecords();
-
-
-    // ------------------------------------------------
-    // Global state
-    // ------------------------------------------------
-
-    window.ReceiptSystem =
-        window.ReceiptSystem || {};
-
-
-    window.ReceiptSystem.state =
-        state;
-
-
-    window.ReceiptSystem.elements =
-        elements;
-
-
-    window.ReceiptSystem.app =
-        app;
-
-
-    // ------------------------------------------------
-    // اہم functions
-    // ------------------------------------------------
-
-    window.ReceiptSystem.save =
-        saveRecord;
-
-
-    window.ReceiptSystem.load =
-        loadRecordsFromStorage;
-
-
-    window.ReceiptSystem.render =
-        renderRecords;
-
-
-    window.ReceiptSystem.search =
-        searchRecords;
-
-
-    window.ReceiptSystem.edit =
-        editRecord;
-
-
-    window.ReceiptSystem.delete =
-        deleteRecord;
-
-
-    window.ReceiptSystem.clear =
-        clearForm;
-
-
-    window.ReceiptSystem.scan =
-        runOCR;
-
-
-    window.ReceiptSystem.backup =
-        backupData;
-
-
-    window.ReceiptSystem.restore =
-        restoreFile;
-
-
-    window.ReceiptSystem.print =
-        printReceipt;
-
-
-    console.log(
-        "===================================="
-    );
-
-
-    console.log(
-        "✅ رسید محفوظ نظام مکمل طور پر تیار ہے۔"
-    );
-
-
-    console.log(
-        "محفوظ رسیدیں:",
-        state.records.length
-    );
-
-
-    console.log(
-        "کل رقم:",
-        getTotalAmount()
-    );
-
-
-    console.log(
-        "===================================="
-    );
+  }
 
 }
 
 
-// ========================================================
-// EXPORT LEGACY MIGRATION
-// ========================================================
+/* =========================================================
+   Firebase Load شروع
+   ========================================================= */
 
-app.migrateOldReceiptsIfNeeded =
-    migrateOldReceiptsIfNeeded;
-
-
-app.finalSetup =
-    finalSetup;
+loadFirebaseRecords();
 
 
-// ========================================================
-// FINAL GLOBAL OBJECT
-// ========================================================
+/* =========================================================
+   آخری Screen
+   ========================================================= */
 
-window.ReceiptSystem =
-    window.ReceiptSystem || {};
-
-
-window.ReceiptSystem.state =
-    state;
-
-
-window.ReceiptSystem.elements =
-    elements;
-
-
-window.ReceiptSystem.app =
-    app;
-
-
-// ========================================================
-// RUN FINAL SETUP
-// ========================================================
-
-finalSetup();
-
-
-// ============================================================
-// SCRIPT.JS COMPLETE
-// ============================================================
-
-console.log(
-    "🎉 SCRIPT.JS — تمام 8 حصے مکمل ہوگئے۔"
+showScreen(
+  "loginScreen"
 );
-
-
-
-})();
